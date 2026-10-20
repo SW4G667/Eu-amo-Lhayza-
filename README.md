@@ -76,7 +76,26 @@ openssl rand -hex 32
 
 **Persistente (local, VPS ou Docker)** — o motor agenda cada monitor com `setTimeout`, aplica jitter, controla cooldown e roda 24/7. É o modo recomendado.
 
-**Serverless (Vercel)** — funções não ficam vivas. O painel dispara um tick a cada ~1,6 s enquanto estiver aberto; o endpoint `/api/cron` permite rajadas via pinger externo. Para operação contínua de verdade, use VPS/Docker.
+**Serverless (Vercel)** — funções não ficam vivas. O painel dispara um tick a cada ~1,6 s enquanto estiver aberto; o endpoint `/api/cron` permite rajadas via pinger externo. Para operação contínua de verdade, use VPS/Docker ou mantenha o worker abaixo rodando em outra máquina.
+
+### Worker / pinger
+
+O script `npm run worker` chama `/api/cron` no intervalo definido, mantendo o motor ativo mesmo com o painel fechado. Funciona apontando para o servidor local ou para a implantação na Vercel.
+
+```bash
+WORKER_URL=https://atalaia-one.vercel.app \
+CRON_SECRET=... \
+WORKER_INTERVAL_MS=2500 \
+npm run worker
+```
+
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `WORKER_URL` | `http://localhost:3000` | base da aplicação |
+| `CRON_SECRET` | — | mesma chave configurada na aplicação (obrigatória) |
+| `WORKER_INTERVAL_MS` | `2500` | intervalo entre gatilhos |
+| `WORKER_TIMEOUT_MS` | `25000` | timeout de cada requisição |
+| `WORKER_ONCE` | — | `1` dispara uma vez e encerra |
 
 ### 24/7 com Docker
 
@@ -91,7 +110,7 @@ O volume `atalaia-data` mantém `.data/state.json` entre reinícios.
 1. Importe o repositório e defina `APP_PASSWORD`, `APP_SECRET` e, se quiser, `CRON_SECRET`.
 2. Para persistência entre instâncias, conecte um Redis REST (Vercel KV ou Upstash) e preencha as variáveis.
 3. Sem Redis, o estado vive em memória por instância — suficiente para testar, não para operar.
-4. Cron da Vercel no plano Hobby roda apenas 1×/dia. Use um pinger externo em `/api/cron?key=...` ou o modo persistente.
+4. Cron da Vercel no plano Hobby roda apenas 1×/dia. Use o worker (`npm run worker`) em `/api/cron?key=...` ou o modo persistente.
 
 ## Estrutura
 
