@@ -94,6 +94,19 @@ export default function PainelPage() {
 
   return (
     <div className="space-y-5">
+      {snapshot?.runtime.vercel && snapshot.runtime.storage !== "Redis" ? (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amberglow/20 bg-amberglow/[0.045] px-3.5 py-2.5">
+          <Cloud className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amberglow/70" strokeWidth={1.8} />
+          <p className="text-[11.5px] leading-relaxed text-bone-300/90">
+            <span className="font-medium text-amberglow/90">Deploy sem Redis.</span> Monitores e achados vivem
+            na memória da instância e podem ser reiniciados. Para persistir, conecte um Redis REST em{" "}
+            <Link href="/ajustes" className="underline decoration-white/20 underline-offset-2 hover:text-bone-50">
+              Ajustes
+            </Link>
+            .
+          </p>
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="checagens"
