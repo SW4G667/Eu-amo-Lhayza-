@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import type { DataShape } from "./types";
+import type { DataShape, Job } from "./types";
 
 const REDIS_KEY = "atalaia:state:v1";
 const FILE_PATH = path.join(process.cwd(), ".data", "state.json");
@@ -37,6 +37,38 @@ function now() {
   return Date.now();
 }
 
+function seedJob(
+  id: string,
+  name: string,
+  platform: Job["platform"],
+  lengths: number[],
+  overrides: Partial<Job> = {}
+): Job {
+  return {
+    id,
+    name,
+    platform,
+    enabled: false,
+    mode: "sequential",
+    lengths,
+    charset: "abcdefghijklmnopqrstuvwxyz",
+    pattern: "",
+    words: [],
+    batchSize: 8,
+    intervalMs: 2500,
+    concurrency: 2,
+    useProxies: true,
+    minScore: 0,
+    cursor: null,
+    checked: 0,
+    found: 0,
+    createdAt: now(),
+    lastRunAt: null,
+    lastError: null,
+    ...overrides,
+  };
+}
+
 export function createEmptyData(): DataShape {
   return {
     version: 1,
@@ -58,28 +90,26 @@ export function createEmptyData(): DataShape {
       },
     },
     jobs: [
-      {
-        id: "job_seed_discord",
-        name: "3 e 4 letras · Discord",
-        platform: "discord",
-        enabled: false,
-        mode: "sequential",
-        lengths: [3, 4],
-        charset: "abcdefghijklmnopqrstuvwxyz",
-        pattern: "",
-        words: [],
+      seedJob("job_seed_discord", "3 e 4 letras · Discord", "discord", [3, 4], {
         batchSize: 10,
         intervalMs: 2500,
         concurrency: 1,
-        useProxies: true,
-        minScore: 0,
-        cursor: null,
-        checked: 0,
-        found: 0,
-        createdAt: now(),
-        lastRunAt: null,
-        lastError: null,
-      },
+      }),
+      seedJob("job_seed_tiktok", "3 letras · TikTok", "tiktok", [3], {
+        batchSize: 6,
+        intervalMs: 3000,
+        concurrency: 2,
+      }),
+      seedJob("job_seed_instagram", "3 letras · Instagram", "instagram", [3], {
+        batchSize: 5,
+        intervalMs: 4000,
+        concurrency: 1,
+      }),
+      seedJob("job_seed_github", "4 letras · GitHub", "github", [4], {
+        batchSize: 8,
+        intervalMs: 2000,
+        concurrency: 3,
+      }),
     ],
     hits: [],
     proxies: [],
