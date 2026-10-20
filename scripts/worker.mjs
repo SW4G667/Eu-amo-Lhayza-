@@ -45,6 +45,7 @@ function stamp() {
 
 function summarize(payload) {
   if (!payload || typeof payload !== "object") return "sem resposta";
+  if (payload.mode === "persistent") return "motor persistente ativo";
   if (!payload.ran) return payload.paused ? "motor pausado" : "nenhum monitor vencido";
   const parts = Array.isArray(payload.results)
     ? payload.results.map(
@@ -119,7 +120,11 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   });
 }
 
-loop().catch((error) => {
-  console.error("[atalaia] falha fatal:", error);
-  process.exit(1);
-});
+loop()
+  .then(() => {
+    if (once && failures > 0) process.exitCode = 1;
+  })
+  .catch((error) => {
+    console.error("[atalaia] falha fatal:", error);
+    process.exit(1);
+  });

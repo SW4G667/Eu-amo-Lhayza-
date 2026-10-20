@@ -471,14 +471,14 @@ class Engine {
     }
   }
 
-  async tick(): Promise<{ ran: number; results: BatchResult[]; paused: boolean }> {
+  async tick(): Promise<{ ran: number; results: BatchResult[]; paused: boolean; mode: "persistent" | "serverless" }> {
     this.lastTickAt = Date.now();
     if (this.mode === "persistent") {
       await this.ensureStarted();
-      return { ran: 0, results: [], paused: false };
+      return { ran: 0, results: [], paused: false, mode: this.mode };
     }
     const data = await readData();
-    if (data.settings.engine.paused) return { ran: 0, results: [], paused: true };
+    if (data.settings.engine.paused) return { ran: 0, results: [], paused: true, mode: this.mode };
 
     const now = Date.now();
     const candidates = data.jobs
@@ -490,7 +490,7 @@ class Engine {
       const result = await this.execute(job.id);
       if (result) results.push(result);
     }
-    return { ran: results.length, results, paused: false };
+    return { ran: results.length, results, paused: false, mode: this.mode };
   }
 
   async runOnce(jobId: string): Promise<BatchResult | null> {

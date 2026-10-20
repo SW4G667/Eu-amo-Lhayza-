@@ -107,6 +107,8 @@ O volume `atalaia-data` mantém `.data/state.json` entre reinícios.
 
 ## Deploy na Vercel
 
+Implantação atual: <https://atalaia-one.vercel.app>
+
 1. Importe o repositório e defina `APP_PASSWORD`, `APP_SECRET` e, se quiser, `CRON_SECRET`.
 2. Para persistência entre instâncias, conecte um Redis REST (Vercel KV ou Upstash) e preencha as variáveis.
 3. Sem Redis, o estado vive em memória por instância — suficiente para testar, não para operar.
