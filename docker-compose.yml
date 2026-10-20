@@ -1,0 +1,16 @@
+services:
+  atalaia:
+    build: .
+    container_name: atalaia
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD}
+      APP_SECRET: ${APP_SECRET}
+      CRON_SECRET: ${CRON_SECRET}
+    volumes:
+      - atalaia-data:/app/.data
+
+volumes:
+  atalaia-data:
