@@ -1,0 +1,21 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+.env
+.env.local
+.env*.local
+.data
+.vercel
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# O workflow do runner é versionado em docs/atalaia-runner.yml.
+# Copie para .github/workflows/runner.yml pela interface do GitHub
+# (o token do agente não possui a permissão "workflows").
+.github/workflows/runner.yml
