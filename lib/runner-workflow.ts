@@ -1,6 +1,7 @@
 export const RUNNER_WORKFLOW_PATH = ".github/workflows/runner.yml";
 
-export const RUNNER_WORKFLOW = String.raw`name: Atalaia Runner
+/** Conteúdo do workflow, usado pelo botão "copiar" em Ajustes. */
+export const RUNNER_WORKFLOW = `name: Atalaia Runner
 
 # Mantém o motor de varredura rodando 24/7 nos runners do GitHub.
 # Cada execução fica no ar por ~5h30 e grava o estado cifrado no branch

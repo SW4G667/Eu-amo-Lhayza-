@@ -115,6 +115,13 @@ O workflow `.github/workflows/runner.yml` mantém o motor de varredura rodando d
 2. O estado completo (monitores, proxies, achados, estatísticas, credenciais cifradas) é gravado no branch `atalaia-state`, em `.atalaia/state.enc`, cifrado em AES-256-GCM com `APP_SECRET`.
 3. O painel na Vercel lê esse mesmo estado. Para editar pelo painel, cole um token do GitHub em **Ajustes → Conexão GitHub**; ele fica apenas no seu navegador e viaja por header em cada requisição.
 
+**Ativar (2 minutos, uma vez)**
+
+1. Abra <https://github.com/SW4G667/Eu-amo-Lhayza-/new/main?filename=.github%2Fworkflows%2Frunner.yml>, cole o conteúdo de `docs/atalaia-runner.yml` (ou use o botão **Copiar workflow** em Ajustes → Conexão GitHub) e faça commit em `main`.
+2. Em <https://github.com/SW4G667/Eu-amo-Lhayza-/settings/secrets/actions/new>, crie o secret `APP_SECRET` com o mesmo valor configurado na Vercel.
+3. Abra a aba **Actions**, escolha *Atalaia Runner* → **Run workflow**. A partir daí o cron (`*/30`) mantém o motor no ar sozinho.
+4. No painel, em **Ajustes → Conexão GitHub**, cole um token fine-grained com `Contents: Read and write` para o console poder editar o estado.
+
 **Configuração**
 
 | Onde | O que | Para quê |
@@ -144,6 +151,8 @@ ATALAIA_ENGINE_MODE=serverless npm run runner
 ## Deploy na Vercel
 
 Implantação atual: <https://atalaia-one.vercel.app>
+
+> Use sempre o domínio de produção `atalaia-one.vercel.app`. Os endereços de deployment (`atalaia-<hash>-...vercel.app`) ficam atrás do login da Vercel por padrão e exibem "Protected Deployment".
 
 1. Importe o repositório e defina `APP_PASSWORD`, `APP_SECRET` e, se quiser, `CRON_SECRET`.
 2. Para persistência entre instâncias, conecte um Redis REST (Vercel KV ou Upstash) e preencha as variáveis.
