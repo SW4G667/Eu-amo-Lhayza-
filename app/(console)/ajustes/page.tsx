@@ -458,16 +458,22 @@ export default function AjustesPage() {
               </Field>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
                 <p className="text-[10.5px] leading-relaxed text-bone-500">
-                  1. Copie o workflow e cole em{" "}
-                  <code className="font-mono text-bone-300">.github/workflows/runner.yml</code> no
-                  repositório. 2. Em <span className="text-bone-300">Settings → Secrets → Actions</span>,
-                  crie <code className="font-mono text-bone-300">APP_SECRET</code> com o mesmo valor da
-                  Vercel.
+                  1. Copie o workflow, abra o arquivo no GitHub e cole. 2. Em{" "}
+                  <a
+                    href="https://github.com/SW4G667/Eu-amo-Lhayza-/settings/secrets/actions/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-bone-300 underline decoration-white/15 underline-offset-2 hover:text-bone-100"
+                  >
+                    Settings → Secrets → Actions
+                  </a>
+                  , crie <code className="font-mono text-bone-300">APP_SECRET</code> com o mesmo valor da
+                  Vercel. 3. Rode o workflow uma vez em <span className="text-bone-300">Actions</span>.
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <CopyButton value={RUNNER_WORKFLOW} />
                   <a
-                    href="https://github.com/SW4G667/Eu-amo-Lhayza-/new/main/.github/workflows"
+                    href="https://github.com/SW4G667/Eu-amo-Lhayza-/new/main?filename=.github%2Fworkflows%2Frunner.yml"
                     target="_blank"
                     rel="noreferrer"
                     className="text-[10.5px] text-bone-500 underline decoration-white/15 underline-offset-2 transition hover:text-bone-200"
