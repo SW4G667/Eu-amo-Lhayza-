@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requestIsAuthed } from "./auth";
+import { setRuntimeStateToken } from "./github-state";
 
 export function json<T>(data: T, init?: ResponseInit): NextResponse {
   return NextResponse.json(data, {
@@ -27,7 +28,10 @@ function sameOrigin(request: Request): boolean {
   }
 }
 
+export const STATE_TOKEN_HEADER = "x-atalaia-state-token";
+
 export function guard(request: Request): NextResponse | null {
+  setRuntimeStateToken(request.headers.get(STATE_TOKEN_HEADER));
   if (!requestIsAuthed(request)) {
     return fail("Sessão expirada. Entre novamente.", 401);
   }

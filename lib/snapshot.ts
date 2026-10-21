@@ -1,6 +1,6 @@
 import { engine } from "./engine";
 import { usingDefaultPassword } from "./auth";
-import { readData, storageLabel } from "./store";
+import { lastStateError, readData, stateStatus, storageLabel } from "./store";
 import type { CredentialInfo, Snapshot } from "./snapshot-types";
 
 function credentialInfo(
@@ -70,6 +70,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
       defaultPassword: usingDefaultPassword(),
       version: "1.0.0",
       uptimeMs: Date.now() - snapshot.startedAt,
+      state: { ...stateStatus(), error: lastStateError(), runner: data.runner ?? null },
     },
     now: Date.now(),
   };

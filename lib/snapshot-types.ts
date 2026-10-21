@@ -51,6 +51,16 @@ export interface Snapshot {
     defaultPassword: boolean;
     version: string;
     uptimeMs: number;
+    state: {
+      driver: "file" | "redis" | "github" | "memory";
+      label: string;
+      writable: boolean;
+      repo: string | null;
+      branch: string | null;
+      syncedAt: number | null;
+      error: string | null;
+      runner: { lastSeenAt: number; host: string; version: string } | null;
+    };
   };
   now: number;
 }

@@ -10,6 +10,7 @@ import {
   CircleDashed,
   Cloud,
   Crosshair,
+  Github,
   Radar,
   Search,
   ShieldAlert,
@@ -54,6 +55,9 @@ export default function PainelPage() {
   const logs = snapshot?.logs ?? [];
   const stats = snapshot?.stats;
   const paused = snapshot?.settings.engine.paused ?? true;
+  const state = snapshot?.runtime.state;
+  const runnerBeat = state?.runner ?? null;
+  const githubLive = state?.driver === "github" && state.writable;
   const activeJobs = jobs.filter((job) => job.enabled).length;
 
   const lastMinute = stats?.buckets.at(-1)?.checks ?? 0;
@@ -94,16 +98,39 @@ export default function PainelPage() {
 
   return (
     <div className="space-y-5">
-      {snapshot?.runtime.vercel && snapshot.runtime.storage !== "Redis" ? (
+      {githubLive ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-lime/[0.14] bg-lime/[0.035] px-3.5 py-2.5">
+          <span className="flex items-center gap-2 text-[11.5px] font-medium text-lime/90">
+            <Github className="h-3.5 w-3.5" strokeWidth={1.9} />
+            Motor 24/7 no GitHub Actions
+          </span>
+          <span className="font-mono text-[10px] text-bone-500">
+            {state?.repo}@{state?.branch}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-bone-400">
+            {runnerBeat ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_2px_rgba(190,242,100,0.35)]" />
+                runner ativo {<TimeAgo ts={runnerBeat.lastSeenAt} />}
+              </>
+            ) : (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-bone-600" />
+                aguardando primeiro ciclo
+              </>
+            )}
+          </span>
+        </div>
+      ) : snapshot?.runtime.vercel ? (
         <div className="flex items-start gap-2.5 rounded-xl border border-amberglow/20 bg-amberglow/[0.045] px-3.5 py-2.5">
           <Cloud className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amberglow/70" strokeWidth={1.8} />
           <p className="text-[11.5px] leading-relaxed text-bone-300/90">
-            <span className="font-medium text-amberglow/90">Deploy sem Redis.</span> Monitores e achados vivem
-            na memória da instância e podem ser reiniciados. Para persistir, conecte um Redis REST em{" "}
+            <span className="font-medium text-amberglow/90">Sem motor persistente.</span> Nesta instância os
+            monitores só checam com a aba aberta. Conecte o repositório do GitHub em{" "}
             <Link href="/ajustes" className="underline decoration-white/20 underline-offset-2 hover:text-bone-50">
               Ajustes
-            </Link>
-            .
+            </Link>{" "}
+            para a varredura rodar 24/7 nos runners.
           </p>
         </div>
       ) : null}

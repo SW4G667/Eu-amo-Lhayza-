@@ -151,6 +151,12 @@ export interface Credentials {
   telegramBot?: TelegramBotCredential;
 }
 
+export interface RunnerBeat {
+  lastSeenAt: number;
+  host: string;
+  version: string;
+}
+
 export interface DataShape {
   version: number;
   settings: {
@@ -163,6 +169,7 @@ export interface DataShape {
   logs: LogEntry[];
   stats: Stats;
   credentials: Credentials;
+  runner?: RunnerBeat | null;
 }
 
 export const DEFAULT_CHARSET = "abcdefghijklmnopqrstuvwxyz";

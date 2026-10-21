@@ -4,7 +4,7 @@ import { generateBatch, isValidName } from "./generator";
 import { ProxyPool } from "./proxy-pool";
 import { notifyDiscordHit, notifyTelegramHit } from "./alerts";
 import { scoreName } from "./score";
-import { readData, updateData } from "./store";
+import { readData, stateStatus, updateData } from "./store";
 import type { DataShape, Hit, Job, LogEntry } from "./types";
 
 export interface BatchResult {
@@ -68,9 +68,14 @@ function credentialProblem(job: Job, ctx: CheckContext): string | null {
   return null;
 }
 
+function engineMode(): "persistent" | "serverless" {
+  const forced = (process.env.ATALAIA_ENGINE_MODE || "").toLowerCase();
+  if (forced === "serverless" || forced === "persistent") return forced;
+  return process.env.VERCEL === "1" ? "serverless" : "persistent";
+}
+
 class Engine {
-  readonly mode: "persistent" | "serverless" =
-    process.env.VERCEL === "1" ? "serverless" : "persistent";
+  readonly mode: "persistent" | "serverless" = engineMode();
   readonly startedAt = Date.now();
   lastTickAt: number | null = null;
 
@@ -471,11 +476,20 @@ class Engine {
     }
   }
 
-  async tick(): Promise<{ ran: number; results: BatchResult[]; paused: boolean; mode: "persistent" | "serverless" }> {
+  async tick(): Promise<{
+    ran: number;
+    results: BatchResult[];
+    paused: boolean;
+    mode: "persistent" | "serverless";
+    readOnly?: boolean;
+  }> {
     this.lastTickAt = Date.now();
     if (this.mode === "persistent") {
       await this.ensureStarted();
       return { ran: 0, results: [], paused: false, mode: this.mode };
+    }
+    if (!stateStatus().writable) {
+      return { ran: 0, results: [], paused: false, mode: this.mode, readOnly: true };
     }
     const data = await readData();
     if (data.settings.engine.paused) return { ran: 0, results: [], paused: true, mode: this.mode };

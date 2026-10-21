@@ -11,6 +11,34 @@ import {
 } from "react";
 import type { Snapshot } from "@/lib/snapshot-types";
 
+const STATE_TOKEN_KEY = "atalaia.state-token";
+
+/** Token do GitHub guardado apenas no navegador do operador. */
+export function getStateToken(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(STATE_TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveStateToken(value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const clean = value.trim();
+    if (clean) window.localStorage.setItem(STATE_TOKEN_KEY, clean);
+    else window.localStorage.removeItem(STATE_TOKEN_KEY);
+  } catch {
+    /* modo privado sem storage */
+  }
+}
+
+function stateHeaders(): Record<string, string> {
+  const token = getStateToken();
+  return token ? { "x-atalaia-state-token": token } : {};
+}
+
 interface ConsoleContextValue {
   snapshot: Snapshot | null;
   loading: boolean;
@@ -47,7 +75,7 @@ export function ConsoleProvider({
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const response = await fetch("/api/state", { cache: "no-store" });
+      const response = await fetch("/api/state", { cache: "no-store", headers: stateHeaders() });
       if (response.status === 401) {
         window.location.href = "/login";
         return;
@@ -93,7 +121,7 @@ export function ConsoleProvider({
       if (active) {
         await fetch("/api/engine", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...stateHeaders() },
           body: JSON.stringify({ action: "tick" }),
         }).catch(() => undefined);
       }
@@ -126,7 +154,7 @@ export async function apiRequest<T>(
   try {
     const response = await fetch(path, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: { "Content-Type": "application/json", ...stateHeaders(), ...(init?.headers ?? {}) },
       cache: "no-store",
     });
     const payload = (await response.json().catch(() => null)) as

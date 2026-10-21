@@ -105,6 +105,42 @@ docker compose up -d --build
 
 O volume `atalaia-data` mantém `.data/state.json` entre reinícios.
 
+## GitHub Actions como VPS (24/7)
+
+O workflow `.github/workflows/runner.yml` mantém o motor de varredura rodando de graça nos runners do GitHub, mesmo com a Vercel hibernando as funções.
+
+**Como funciona**
+
+1. O workflow roda por até 5h30 e um cron a cada 30 min enfileira a próxima execução — quando a atual termina, a próxima assume. Sem intervalo morto.
+2. O estado completo (monitores, proxies, achados, estatísticas, credenciais cifradas) é gravado no branch `atalaia-state`, em `.atalaia/state.enc`, cifrado em AES-256-GCM com `APP_SECRET`.
+3. O painel na Vercel lê esse mesmo estado. Para editar pelo painel, cole um token do GitHub em **Ajustes → Conexão GitHub**; ele fica apenas no seu navegador e viaja por header em cada requisição.
+
+**Configuração**
+
+| Onde | O que | Para quê |
+| --- | --- | --- |
+| GitHub → Settings → Secrets → Actions | `APP_SECRET` | decifrar/gravar o estado no runner |
+| Painel → Ajustes → Conexão GitHub | token fine-grained com `Contents: Read and write` | permitir edições pelo painel |
+| Vercel (opcional) | `ATALAIA_STATE_TOKEN` | conecta sem depender do navegador |
+
+**Variáveis aceitas**
+
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `ATALAIA_STATE_MODE` | automático | `github`, `redis`, `file` ou `memory` |
+| `ATALAIA_STATE_REPO` | `SW4G667/Eu-amo-Lhayza-` | repositório do estado |
+| `ATALAIA_STATE_BRANCH` | `atalaia-state` | branch do estado |
+| `ATALAIA_STATE_PATH` | `.atalaia/state.enc` | arquivo do estado |
+| `ATALAIA_STATE_TOKEN` | — | token de escrita (opcional) |
+| `ATALAIA_ENGINE_MODE` | automático | força `serverless` (runner) ou `persistent` |
+
+**Rodar o runner na sua máquina**
+
+```bash
+APP_SECRET=... ATALAIA_STATE_MODE=github ATALAIA_STATE_TOKEN=... \
+ATALAIA_ENGINE_MODE=serverless npm run runner
+```
+
 ## Deploy na Vercel
 
 Implantação atual: <https://atalaia-one.vercel.app>

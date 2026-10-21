@@ -1,11 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { githubStateConfig, readGithubState, writeGithubState } from "./github-state";
 import type { DataShape, Job } from "./types";
 
 const REDIS_KEY = "atalaia:state:v1";
 const FILE_PATH = path.join(process.cwd(), ".data", "state.json");
 
-type Driver = "file" | "redis" | "memory";
+type Driver = "file" | "redis" | "github" | "memory";
 
 function redisConfig(): { url: string; token: string } | null {
   const url =
@@ -21,6 +22,13 @@ function redisConfig(): { url: string; token: string } | null {
 }
 
 export function storageDriver(): Driver {
+  const forced = (process.env.ATALAIA_STATE_MODE || "").toLowerCase();
+  if (forced === "file") return "file";
+  if (forced === "memory") return "memory";
+  if (forced === "redis") return "redis";
+  if (forced === "github") return "github";
+  // token do ambiente ou enviado pelo navegador em Ajustes → Conexão GitHub
+  if (githubStateConfig()) return "github";
   if (redisConfig()) return "redis";
   if (process.env.VERCEL === "1") return "memory";
   return "file";
@@ -28,9 +36,42 @@ export function storageDriver(): Driver {
 
 export function storageLabel(): string {
   const driver = storageDriver();
+  if (driver === "github") return "GitHub Actions";
   if (driver === "redis") return "Redis";
   if (driver === "file") return "Arquivo local";
   return "Memória";
+}
+
+export interface StateStatus {
+  driver: Driver;
+  label: string;
+  writable: boolean;
+  repo: string | null;
+  branch: string | null;
+  syncedAt: number | null;
+}
+
+export function stateStatus(): StateStatus {
+  const driver = storageDriver();
+  const cfg = githubStateConfig();
+  if (driver === "github" && cfg) {
+    return {
+      driver,
+      label: "GitHub Actions",
+      writable: cfg.writable,
+      repo: cfg.repo,
+      branch: cfg.branch,
+      syncedAt: githubCache?.at ?? null,
+    };
+  }
+  return {
+    driver,
+    label: storageLabel(),
+    writable: driver !== "memory" || Boolean(process.env.VERCEL),
+    repo: null,
+    branch: null,
+    syncedAt: null,
+  };
 }
 
 function now() {
@@ -110,6 +151,12 @@ export function createEmptyData(): DataShape {
         intervalMs: 2000,
         concurrency: 3,
       }),
+      seedJob("job_seed_steam", "3 e 4 letras · Steam", "steam", [3, 4], {
+        batchSize: 3,
+        intervalMs: 6000,
+        concurrency: 1,
+        enabled: true,
+      }),
     ],
     hits: [],
     proxies: [],
@@ -167,6 +214,7 @@ function normalize(data: Partial<DataShape> | null): DataShape {
       startedAt: data.stats?.startedAt ?? base.stats.startedAt,
     },
     credentials: data.credentials ?? {},
+    runner: data.runner ?? null,
   };
 }
 
@@ -218,12 +266,107 @@ async function writeFile(data: DataShape) {
 
 let cache: DataShape | null = null;
 
+interface GithubCache {
+  data: DataShape;
+  at: number;
+}
+
+let githubCache: GithubCache | null = null;
+let githubPending: DataShape | null = null;
+let githubTimer: ReturnType<typeof setTimeout> | null = null;
+let githubLastError: string | null = null;
+let githubFlush: Promise<void> | null = null;
+
+function stateTtlMs(): number {
+  const raw = Number.parseInt(process.env.ATALAIA_STATE_TTL_MS ?? "", 10);
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  return process.env.VERCEL === "1" ? 7000 : 4000;
+}
+
+function flushIntervalMs(): number {
+  const raw = Number.parseInt(process.env.ATALAIA_STATE_FLUSH_MS ?? "", 10);
+  return Number.isFinite(raw) && raw >= 5000 ? raw : 25000;
+}
+
+function deferWrites(): boolean {
+  return Boolean(process.env.ATALAIA_STATE_DEFER);
+}
+
+async function readGithub(): Promise<DataShape> {
+  const cfg = githubStateConfig();
+  if (!cfg) return createEmptyData();
+  const fresh = githubCache && Date.now() - githubCache.at < stateTtlMs();
+  if (fresh) return structuredClone(githubCache!.data);
+  try {
+    const remote = await readGithubState(cfg);
+    const data = remote ? normalize(remote as Partial<DataShape>) : githubCache?.data ?? createEmptyData();
+    githubCache = { data, at: Date.now() };
+    githubLastError = null;
+    return structuredClone(data);
+  } catch (error) {
+    githubLastError = error instanceof Error ? error.message : String(error);
+    if (githubCache) return structuredClone(githubCache.data);
+    return createEmptyData();
+  }
+}
+
+export function lastStateError(): string | null {
+  return githubLastError;
+}
+
+async function pushGithub(data: DataShape): Promise<void> {
+  const cfg = githubStateConfig();
+  if (!cfg) return;
+  await writeGithubState(cfg, data);
+  githubCache = { data: structuredClone(data), at: Date.now() };
+  githubLastError = null;
+}
+
+/** Envia agora qualquer alteração pendente (modo diferido do runner). */
+export async function flushData(): Promise<void> {
+  if (githubFlush) await githubFlush;
+  if (!githubPending) return;
+  const pending = githubPending;
+  githubPending = null;
+  if (githubTimer) {
+    clearTimeout(githubTimer);
+    githubTimer = null;
+  }
+  const run = pushGithub(pending)
+    .catch((error) => {
+      githubLastError = error instanceof Error ? error.message : String(error);
+      githubPending = pending;
+    })
+    .finally(() => {
+      githubFlush = null;
+    });
+  githubFlush = run;
+  await run;
+}
+
+function scheduleFlush(data: DataShape): void {
+  githubPending = structuredClone(data);
+  githubCache = { data: structuredClone(data), at: Date.now() };
+  if (githubTimer) return;
+  githubTimer = setTimeout(() => {
+    githubTimer = null;
+    void flushData();
+  }, flushIntervalMs());
+  // não segura o processo do runner vivo só por causa do timer
+  if (typeof githubTimer === "object" && githubTimer && "unref" in githubTimer) {
+    (githubTimer as { unref: () => void }).unref();
+  }
+}
+
 export async function readData(): Promise<DataShape> {
   const driver = storageDriver();
   if (driver === "memory") {
     const g = globalStore();
     if (!g.memory) g.memory = createEmptyData();
     return structuredClone(g.memory);
+  }
+  if (driver === "github") {
+    return readGithub();
   }
   if (driver === "redis") {
     const data = await readRedis();
@@ -245,6 +388,14 @@ export async function writeData(data: DataShape): Promise<void> {
   const driver = storageDriver();
   if (driver === "memory") {
     globalStore().memory = structuredClone(data);
+    return;
+  }
+  if (driver === "github") {
+    if (deferWrites()) {
+      scheduleFlush(data);
+      return;
+    }
+    await pushGithub(data);
     return;
   }
   if (driver === "redis") {

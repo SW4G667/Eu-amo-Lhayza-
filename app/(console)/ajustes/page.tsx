@@ -15,13 +15,15 @@ import {
   TriangleAlert,
   Twitch,
 } from "lucide-react";
-import { apiRequest, useConsole } from "@/components/console-provider";
+import { apiRequest, saveStateToken, useConsole } from "@/components/console-provider";
 import { TimeAgo } from "@/components/time";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { Badge, Panel, PanelHeader } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { RUNNER_WORKFLOW } from "@/lib/runner-workflow";
 import type { CredentialInfo } from "@/lib/snapshot-types";
 import { cn, duration } from "@/lib/utils";
 
@@ -40,11 +42,17 @@ export default function AjustesPage() {
     userAgent: snapshot?.settings.engine.userAgent ?? "",
   });
   const [savingEngine, setSavingEngine] = useState(false);
+  const [ghToken, setGhToken] = useState("");
+  const [connectingGh, setConnectingGh] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const credentials = snapshot?.credentials;
   const runtime = snapshot?.runtime;
+  const stateInfo = runtime?.state;
+  const stateConnected = Boolean(stateInfo && stateInfo.driver === "github" && stateInfo.writable);
+  const stateLabel = stateInfo?.repo ? `${stateInfo.repo}@${stateInfo.branch}` : null;
+  const runner = stateInfo?.runner ?? null;
 
   async function saveCredential(platform: CredentialKey) {
     setSaving(platform);
@@ -86,6 +94,31 @@ export default function AjustesPage() {
     }
     toast.push("Credencial removida.", "success");
     await refresh();
+  }
+
+  async function connectGithub() {
+    const token = ghToken.trim();
+    if (!token) {
+      toast.push("Cole o token do GitHub para conectar.", "error");
+      return;
+    }
+    setConnectingGh(true);
+    saveStateToken(token);
+    const probe = await apiRequest<{ ok: boolean }>("/api/state");
+    setConnectingGh(false);
+    if (!probe.ok) {
+      toast.push(probe.error, "error");
+      return;
+    }
+    await refresh();
+    setGhToken("");
+    toast.push("GitHub conectado. O painel agora lê e grava o estado do repositório.", "success");
+  }
+
+  async function disconnectGithub() {
+    saveStateToken("");
+    await refresh();
+    toast.push("Token removido deste navegador.", "info");
   }
 
   async function saveEngine() {
@@ -381,6 +414,85 @@ export default function AjustesPage() {
                 </p>
               </div>
             ) : null}
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Conexão GitHub"
+              subtitle="Motor 24/7 nos runners"
+              icon={<Github className="h-4 w-4" strokeWidth={1.7} />}
+            />
+            <div className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={stateConnected ? "ok" : "muted"} dot>
+                  {stateConnected ? "conectado" : "desconectado"}
+                </Badge>
+                {stateLabel ? (
+                  <span className="font-mono text-[10px] text-bone-500">{stateLabel}</span>
+                ) : null}
+                {runner ? (
+                  <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-bone-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-lime" />
+                    runner <TimeAgo ts={runner.lastSeenAt} />
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-[10.5px] leading-relaxed text-bone-500">
+                O workflow <code className="font-mono text-bone-300">Atalaia Runner</code> mantém o motor
+                girando e grava o estado cifrado no branch{" "}
+                <code className="font-mono text-bone-300">atalaia-state</code>. Para o painel editar esse
+                estado, cole um token fine-grained com{" "}
+                <code className="font-mono text-bone-300">Contents: Read and write</code> no repositório.
+                Ele fica apenas neste navegador.
+              </p>
+              <Field label="token do GitHub" hint="Não é enviado para nenhum servidor além do seu.">
+                <Input
+                  type="password"
+                  placeholder="github_pat_…"
+                  value={ghToken}
+                  onChange={(event) => setGhToken(event.target.value)}
+                  className="font-mono text-[11px]"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+                <p className="text-[10.5px] leading-relaxed text-bone-500">
+                  1. Copie o workflow e cole em{" "}
+                  <code className="font-mono text-bone-300">.github/workflows/runner.yml</code> no
+                  repositório. 2. Em <span className="text-bone-300">Settings → Secrets → Actions</span>,
+                  crie <code className="font-mono text-bone-300">APP_SECRET</code> com o mesmo valor da
+                  Vercel.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <CopyButton value={RUNNER_WORKFLOW} />
+                  <a
+                    href="https://github.com/SW4G667/Eu-amo-Lhayza-/new/main/.github/workflows"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10.5px] text-bone-500 underline decoration-white/15 underline-offset-2 transition hover:text-bone-200"
+                  >
+                    abrir no GitHub
+                  </a>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="primary" size="sm" loading={connectingGh} onClick={() => void connectGithub()}>
+                  Conectar
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void disconnectGithub()}>
+                  Remover
+                </Button>
+                <a
+                  href="https://github.com/settings/personal-access-tokens/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-auto text-[10.5px] text-bone-500 underline decoration-white/15 underline-offset-2 transition hover:text-bone-200"
+                >
+                  criar token
+                </a>
+              </div>
+            </div>
           </Panel>
 
           <Panel>
