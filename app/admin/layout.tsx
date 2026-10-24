@@ -9,7 +9,12 @@ export const metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const access = await pageAccess();
+  let access = null;
+  try {
+    access = await pageAccess();
+  } catch {
+    access = null;
+  }
   if (!access) redirect("/");
   if (access.kind !== "admin") redirect("/painel");
   return <>{children}</>;

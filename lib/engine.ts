@@ -32,6 +32,8 @@ function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`;
 }
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 async function runPool<T, R>(
   items: T[],
   limit: number,
@@ -203,8 +205,8 @@ class Engine {
 
       const amount = Math.min(
         job.batchSize,
-        this.mode === "serverless" ? 8 : 200,
-        options.manual ? 48 : 200
+        5, // teto rígido: 5 nomes por rodada
+        options.manual ? 5 : 5
       );
       const batch = generateBatch(job, amount);
 
@@ -269,7 +271,21 @@ class Engine {
         )
       );
 
+      // Espaçamento entre checagens dentro do lote: ~1,4s por nome (com jitter),
+      // simulando um humano digitando — evita rajada e banimento.
+      const paceMs = Math.round(
+        Math.max(900, Math.min(2400, (job.intervalMs || 7000) / Math.max(1, job.batchSize)))
+      );
+      let nextSlot = Date.now();
+      const pace = async () => {
+        const now = Date.now();
+        const slot = Math.max(now, nextSlot);
+        nextSlot = slot + paceMs + Math.floor(Math.random() * 420);
+        if (slot > now) await sleep(slot - now);
+      };
+
       const results = await runPool(names, concurrency, async (name) => {
+        await pace();
         const proxy = job.useProxies ? pool.pick() : null;
         const ctx: CheckContext = { ...ctxBase, proxy };
         const out = await checkName(job.platform, name, ctx);

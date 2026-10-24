@@ -16,8 +16,12 @@ Não é uma lista estática de nomes: o motor gera candidatos, consulta a plataf
   proxies, eventos (com copiar/baixar log) e ajustes.
 - **Plataformas sob controle**: tudo começa bloqueado com “Em breve”; só aparece para o
   cliente quando você libera em `/admin → Plataformas`.
+- **Ritmo anti-ban**: 5 nomes por rodada, 7 s entre rodadas, ~1,4 s entre checagens,
+  concorrência 1 por padrão e pausa automática em `429`.
+- **Proxies IPv6** (feed da ProxyScrape) com teste real por socket.
 - **Segurança**: cookies HttpOnly assinados (HMAC), key guardada só como hash + AES-256-GCM,
   rate limit por IP, mesma origem em POST, RLS no Supabase e trilha de auditoria.
+- **Diagnóstico**: `/api/health` mostra banco, Discord, PhanomCloud e key de admin sem expor segredos.
 
 Guia completo, passo a passo: **[docs/CONFIGURACAO.md](docs/CONFIGURACAO.md)**.
 

@@ -9,7 +9,7 @@ import { buildSnapshot } from "@/lib/snapshot";
 export const dynamic = "force-dynamic";
 
 export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
-  const access = await pageAccess();
+  const access = await pageAccess().catch(() => null);
   if (!access) redirect("/");
 
   await ensureEngineStarted();

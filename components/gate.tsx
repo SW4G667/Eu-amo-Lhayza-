@@ -1,94 +1,74 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, KeyRound, Loader2, Lock, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import type { PlatformState, BrandingSettings } from "@/lib/cloud/types";
-import { BrandMark } from "@/components/brand";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, KeyRound, Loader2, ShieldCheck } from "lucide-react";
+import type { BrandingSettings } from "@/lib/cloud/types";
 import { cn } from "@/lib/utils";
-
-interface PlanPreview {
-  id: string;
-  name: string;
-  days: number;
-  maxMonitors: number;
-  priceCents: number;
-}
 
 interface GateProps {
   branding: BrandingSettings;
-  platforms: PlatformState[];
-  plans: PlanPreview[];
   discordConfigured: boolean;
-  maintenance: boolean;
-  requireDiscord: boolean;
-  welcome: string;
   discordUser: { username: string; banned: boolean } | null;
+  maintenance: boolean;
+  welcome: string;
+  requireDiscord: boolean;
 }
 
-const money = (cents: number) =>
-  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
+/**
+ * Só formata keys de licença (ATL-...). A key administrativa é texto livre:
+ * mexer nela (maiúsculas/hífens) fazia o login do admin falhar.
+ */
 function maskKey(value: string): string {
-  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
-  const groups = clean.match(/.{1,5}/g) ?? [];
-  return groups.join("-");
+  if (/^\s*atl/i.test(value)) {
+    const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
+    return (clean.match(/.{1,5}/g) ?? []).join("-");
+  }
+  return value.slice(0, 64);
 }
 
 export function Gate({
   branding,
-  platforms,
-  plans,
   discordConfigured,
-  maintenance,
-  requireDiscord,
-  welcome,
   discordUser,
+  maintenance,
+  welcome,
+  requireDiscord,
 }: GateProps) {
   const [key, setKey] = useState("");
-  const [busy, setBusy] = useState<"key" | "admin" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [needsDiscord, setNeedsDiscord] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [adminKey, setAdminKey] = useState("");
-  const adminRef = useRef<HTMLInputElement>(null);
-  const keyRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const failure = params.get("erro");
     if (failure) setError(failure);
     if (params.get("ok") === "discord" && discordUser) {
-      setNotice(`Discord conectado como ${discordUser.username}. Agora ative sua key.`);
+      setKey("");
     }
-    if (discordUser) keyRef.current?.focus();
+    inputRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const enabled = useMemo(() => platforms.filter((platform) => platform.enabled), [platforms]);
-  const soon = useMemo(() => platforms.filter((platform) => !platform.enabled), [platforms]);
-
-  useEffect(() => {
-    if (adminOpen) adminRef.current?.focus();
-  }, [adminOpen]);
-
-  async function submitKey(raw: string, mode: "key" | "admin") {
-    if (!raw.trim()) {
-      setError("Digite sua key.");
+  async function submit() {
+    const raw = key.trim();
+    if (!raw) {
+      setError("Cole sua key para entrar.");
+      inputRef.current?.focus();
       return;
     }
-    setBusy(mode);
+    setBusy(true);
     setError(null);
-    setNotice(null);
     setNeedsDiscord(false);
     try {
       const response = await fetch("/api/auth/key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: raw.trim() }),
+        body: JSON.stringify({ key: raw }),
       });
       const payload = (await response.json().catch(() => null)) as
-        | { ok?: boolean; error?: string; redirect?: string; message?: string; reason?: string }
+        | { ok?: boolean; error?: string; redirect?: string; reason?: string }
         | null;
 
       if (payload?.reason === "discord_required") {
@@ -100,340 +80,137 @@ export function Gate({
         setError(payload?.error ?? `Não foi possível validar (${response.status}).`);
         return;
       }
-      setNotice(payload.message ?? "Acesso liberado.");
       window.location.href = payload.redirect ?? "/painel";
     } catch {
       setError("Falha de conexão. Tente novamente.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-ink-950">
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-70" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-lime-500/[0.055] blur-[120px]" />
-      <div className="pointer-events-none absolute inset-0 noise" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-transparent px-5 py-10">
+      {/* brilho suave, sem textura pesada */}
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-lime-500/[0.07] blur-[130px]" />
+      <div className="pointer-events-none absolute -bottom-40 right-0 h-[360px] w-[520px] rounded-full bg-[#8B9CFF]/[0.06] blur-[130px]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1080px] flex-col px-5 pb-8 pt-6 sm:px-8">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.08] bg-ink-800 text-bone-100">
-              <BrandMark />
-            </span>
-            <div className="leading-none">
-              <p className="text-[15px] font-semibold tracking-[-0.01em] text-bone-50">
-                {branding.productName}
-              </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-bone-500">
-                {branding.tagline}
-              </p>
-            </div>
-          </div>
+      <div className="relative w-full max-w-[380px]">
+        <div className="mb-7 flex flex-col items-center text-center">
+          <span className="mb-3 grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.06] text-bone-100 backdrop-blur-xl">
+            <ShieldCheck className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          </span>
+          <h1 className="text-[17px] font-medium tracking-[-0.01em] text-bone-50">
+            {branding.productName}
+          </h1>
+          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-bone-600">
+            {maintenance ? "em manutenção" : branding.tagline}
+          </p>
+        </div>
 
-          <div className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-1">
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                maintenance ? "bg-amberglow" : "bg-lime-400 animate-pulse-dot"
-              )}
-            />
-            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-bone-400">
-              {maintenance ? "manutenção" : "sistemas ativos"}
-            </span>
-          </div>
-        </header>
-
-        <main className="flex flex-1 flex-col justify-center py-10">
-          <div className="max-w-[600px]">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.02] px-2.5 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-bone-400">
-              <Sparkles className="h-2.5 w-2.5 text-lime-400" strokeWidth={2.2} />
-              {discordUser ? "discord conectado" : "acesso restrito"}
-            </span>
-            <h1 className="mt-4 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-bone-50 sm:text-[40px]">
-              Encontre o username
-              <br />
-              <span className="text-bone-400">antes de todo mundo.</span>
-            </h1>
-            <p className="mt-3 max-w-[470px] text-[13px] leading-relaxed text-bone-400">
-              {welcome}
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            {/* Discord */}
-            <section
-              className={cn(
-                "group relative flex flex-col rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.035] to-white/[0.008] p-5",
-                "transition-colors duration-200 hover:border-white/[0.11]"
-              )}
-            >
-              <div className="flex items-start justify-between">
-                <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#8B9CFF]/20 bg-[#8B9CFF]/[0.09] text-[#AEB9FF]">
-                  <DiscordGlyph />
-                </span>
-                <span className="rounded-full border border-lime-500/20 bg-lime-400/[0.07] px-2 py-[2px] font-mono text-[8.5px] uppercase tracking-[0.14em] text-lime-300">
-                  recomendado
-                </span>
-              </div>
-              <h2 className="mt-4 text-[15px] font-medium text-bone-50">
-                {discordUser ? discordUser.username : "Entrar com Discord"}
-              </h2>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-bone-500">
-                {discordUser
-                  ? "Conta conectada. Falta só ativar a key para liberar o console."
-                  : "Vincula sua key à sua conta. Depois do primeiro login, entrar fica em um clique."}
-              </p>
-              <div className="mt-auto pt-5">
-                <button
-                  type="button"
-                  disabled={!discordConfigured}
-                  onClick={() => {
-                    window.location.href = "/api/auth/discord/start";
-                  }}
-                  className={cn(
-                    "flex h-10 w-full items-center justify-center gap-2 rounded-lg text-[12.5px] font-medium transition-colors",
-                    discordConfigured
-                      ? "bg-bone-50 text-ink-950 hover:bg-white"
-                      : "cursor-not-allowed border border-white/[0.06] bg-white/[0.03] text-bone-500"
-                  )}
-                >
-                  {discordConfigured ? (
-                    <>
-                      {discordUser ? "Trocar de conta" : "Conectar Discord"}
-                      <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} />
-                    </>
-                  ) : (
-                    <>
-                      <Wrench className="h-3.5 w-3.5" strokeWidth={2} />
-                      Em breve
-                    </>
-                  )}
-                </button>
-                {!discordConfigured ? (
-                  <p className="mt-2 font-mono text-[9.5px] uppercase tracking-[0.1em] text-bone-600">
-                    OAuth do Discord ainda não configurado
-                  </p>
-                ) : null}
-              </div>
-            </section>
-
-            {/* Key */}
-            <section className="relative flex flex-col rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.035] to-white/[0.008] p-5 transition-colors duration-200 hover:border-white/[0.11]">
-              <div className="flex items-start justify-between">
-                <span className="grid h-9 w-9 place-items-center rounded-lg border border-lime-500/20 bg-lime-400/[0.08] text-lime-300">
-                  <KeyRound className="h-4 w-4" strokeWidth={1.9} />
-                </span>
-                {requireDiscord ? (
-                  <span className="rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-[2px] font-mono text-[8.5px] uppercase tracking-[0.14em] text-bone-500">
-                    exige discord
-                  </span>
-                ) : null}
-              </div>
-              <h2 className="mt-4 text-[15px] font-medium text-bone-50">Tenho uma key</h2>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-bone-500">
-                Cole a key que você recebeu. A contagem de dias só começa na primeira ativação.
-              </p>
-
-              <form
-                className="mt-auto pt-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitKey(key, "key");
-                }}
-              >
-                <input
-                  ref={keyRef}
-                  value={key}
-                  onChange={(event) => setKey(maskKey(event.target.value))}
-                  placeholder="ATL-XXXXX-XXXXX-XXXXX"
-                  autoComplete="off"
-                  spellCheck={false}
-                  inputMode="text"
-                  className={cn(
-                    "h-10 w-full rounded-lg border bg-ink-950/80 px-3 font-mono text-[12px] tracking-[0.08em] text-bone-100 outline-none transition-colors",
-                    "placeholder:text-bone-600 placeholder:tracking-[0.03em]",
-                    error ? "border-ember/40" : "border-white/[0.07] focus:border-lime-500/45"
-                  )}
-                />
-                <button
-                  type="submit"
-                  disabled={busy !== null}
-                  className={cn(
-                    "mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-lime-500/25 bg-lime-400/[0.1] text-[12.5px] font-medium text-lime-300 transition-colors",
-                    busy ? "opacity-70" : "hover:bg-lime-400/[0.16]"
-                  )}
-                >
-                  {busy === "key" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      Ativar key
-                      <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} />
-                    </>
-                  )}
-                </button>
-              </form>
-            </section>
-          </div>
-
-          {error ? (
-            <div className="mt-3 animate-fade-up rounded-lg border border-ember/25 bg-ember/[0.07] px-3.5 py-2.5">
-              <p className="text-[12px] leading-relaxed text-[#FFB4A2]">{error}</p>
-              {needsDiscord && discordConfigured ? (
-                <a
-                  href="/api/auth/discord/start"
-                  className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-bone-100 underline-offset-4 hover:underline"
-                >
-                  Conectar Discord agora
-                  <ArrowRight className="h-3 w-3" />
-                </a>
-              ) : null}
-            </div>
-          ) : null}
-
-          {notice ? (
-            <div className="mt-3 rounded-lg border border-mint/25 bg-mint/[0.07] px-3.5 py-2.5 text-[12px] text-mint">
-              {notice}
-            </div>
-          ) : null}
-
-          {plans.length ? (
-            <div className="mt-7">
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-bone-600">
-                planos disponíveis
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {plans.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className="flex items-baseline gap-2 rounded-lg border border-white/[0.055] bg-white/[0.018] px-3 py-2"
-                  >
-                    <span className="text-[12px] text-bone-200">{plan.name}</span>
-                    <span className="font-mono text-[10px] text-bone-500">
-                      {plan.days >= 3650 ? "vitalício" : `${plan.days}d`} ·{" "}
-                      {plan.maxMonitors} mon
-                    </span>
-                    <span className="font-mono text-[10px] text-lime-300">{money(plan.priceCents)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-4">
-            <div className="flex items-center gap-3 text-[11px] text-bone-600">
-              <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
-                keys cifradas e sessões assinadas
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-5 shadow-[0_24px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
+          {/* Discord */}
+          <button
+            type="button"
+            disabled={!discordConfigured}
+            onClick={() => {
+              window.location.href = "/api/auth/discord/start";
+            }}
+            className={cn(
+              "flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[13px] font-medium transition-colors",
+              discordConfigured
+                ? "bg-[#5865F2] text-white hover:bg-[#4a57e6]"
+                : "cursor-not-allowed border border-white/[0.06] bg-white/[0.03] text-bone-600"
+            )}
+          >
+            <DiscordGlyph />
+            {discordUser ? discordUser.username : "Entrar com Discord"}
+            {!discordConfigured ? (
+              <span className="ml-1 rounded-full border border-white/10 px-1.5 py-[1px] font-mono text-[8.5px] uppercase tracking-[0.08em]">
+                em breve
               </span>
+            ) : null}
+          </button>
+
+          <div className="my-4 flex items-center gap-3">
+            <span className="h-px flex-1 bg-white/[0.07]" />
+            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-bone-700">ou</span>
+            <span className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          {/* Key */}
+          <div className="space-y-2">
+            <div className="relative">
+              <KeyRound
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-bone-600"
+                strokeWidth={1.9}
+              />
+              <input
+                ref={inputRef}
+                value={key}
+                onChange={(event) => {
+                  setKey(maskKey(event.target.value));
+                  if (error) setError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void submit();
+                }}
+                placeholder="ATL-XXXXX-XXXXX-XXXXX"
+                autoComplete="off"
+                spellCheck={false}
+                className={cn(
+                  "h-11 w-full rounded-xl border bg-black/25 pl-9 pr-3 font-mono text-[12px] tracking-[0.09em] text-bone-100 outline-none transition-colors backdrop-blur",
+                  "placeholder:tracking-[0.02em] placeholder:text-bone-700",
+                  error ? "border-ember/40" : "border-white/[0.09] focus:border-lime-500/50"
+                )}
+              />
             </div>
+
             <button
               type="button"
-              onClick={() => setAdminOpen((value) => !value)}
-              className="inline-flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-bone-600 transition-colors hover:text-bone-300"
+              onClick={() => void submit()}
+              disabled={busy}
+              className={cn(
+                "flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-lime-500/25 bg-lime-400/[0.12] text-[12.5px] font-medium text-lime-200 transition-colors",
+                busy ? "opacity-70" : "hover:bg-lime-400/[0.18]"
+              )}
             >
-              <Lock className="h-3 w-3" strokeWidth={1.9} />
-              acesso administrativo
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  Entrar
+                  <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} />
+                </>
+              )}
             </button>
           </div>
 
-          {adminOpen ? (
-            <form
-              className="mt-3 animate-fade-up rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitKey(adminKey, "admin");
-              }}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <input
-                    ref={adminRef}
-                    value={adminKey}
-                    onChange={(event) => setAdminKey(event.target.value)}
-                    type="password"
-                    placeholder="key administrativa"
-                    autoComplete="off"
-                    className="h-9 w-full rounded-lg border border-white/[0.07] bg-ink-950/70 px-3 font-mono text-[12px] text-bone-100 outline-none focus:border-lime-500/40"
-                  />
-                </div>
+          {error ? (
+            <div className="mt-3 rounded-lg border border-ember/25 bg-ember/[0.08] px-3 py-2">
+              <p className="text-[11.5px] leading-relaxed text-[#FFB4A2]">{error}</p>
+              {needsDiscord ? (
                 <button
-                  type="submit"
-                  disabled={busy !== null}
-                  className="flex h-9 items-center gap-2 rounded-lg border border-white/[0.09] bg-white/[0.05] px-3.5 text-[12px] text-bone-100 transition-colors hover:bg-white/[0.08]"
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/api/auth/discord/start";
+                  }}
+                  disabled={!discordConfigured}
+                  className="mt-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-bone-200 underline-offset-4 hover:underline disabled:opacity-50"
                 >
-                  {busy === "admin" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Lock className="h-3.5 w-3.5" strokeWidth={2} />
-                  )}
-                  Entrar no painel
+                  {discordConfigured ? "conectar discord agora" : "discord ainda não configurado"}
                 </button>
-              </div>
-              <p className="mt-2 font-mono text-[9.5px] uppercase tracking-[0.1em] text-bone-600">
-                sessão de 12 horas · registrada em auditoria
-              </p>
-            </form>
+              ) : null}
+            </div>
           ) : null}
-        </main>
+        </div>
 
-        <PlatformDock enabled={enabled} soon={soon} />
-      </div>
-    </div>
-  );
-}
-
-function PlatformDock({ enabled, soon }: { enabled: PlatformState[]; soon: PlatformState[] }) {
-  return (
-    <div className="relative">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-bone-600">plataformas</p>
-        <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-bone-600">
-          {enabled.length} liberada{enabled.length === 1 ? "" : "s"}
+        <p className="mt-4 text-center text-[10.5px] leading-relaxed text-bone-700">
+          {discordUser
+            ? "Discord conectado. Cole sua key para liberar o console."
+            : requireDiscord
+              ? "A key só ativa com o Discord conectado."
+              : welcome}
         </p>
-      </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {[...enabled, ...soon].map((platform) => (
-          <div
-            key={platform.id}
-            title={platform.enabled ? `${platform.name} · liberado` : `${platform.name} · em breve`}
-            className={cn(
-              "flex min-w-[74px] flex-1 flex-col items-center gap-1.5 rounded-lg border px-2 py-2.5 transition-colors",
-              platform.enabled
-                ? "border-white/[0.07] bg-white/[0.03]"
-                : "border-white/[0.04] bg-white/[0.012] opacity-45"
-            )}
-          >
-            <span
-              className="grid h-6 w-6 place-items-center rounded-[6px] border font-mono text-[8.5px] font-medium"
-              style={
-                platform.enabled
-                  ? {
-                      color: platform.accent || "#CBEF6E",
-                      borderColor: `${platform.accent || "#CBEF6E"}33`,
-                      backgroundColor: `${platform.accent || "#CBEF6E"}12`,
-                    }
-                  : { color: "#6C766B", borderColor: "rgba(255,255,255,0.06)" }
-              }
-            >
-              {platform.short}
-            </span>
-            <span
-              className={cn(
-                "font-mono text-[8.5px] uppercase tracking-[0.08em]",
-                platform.enabled ? "text-bone-400" : "text-bone-600"
-              )}
-            >
-              {platform.name}
-            </span>
-            <span className="h-[3px] w-6 rounded-full bg-white/[0.05] overflow-hidden">
-              <span
-                className={cn("block h-full rounded-full", platform.enabled ? "w-full bg-lime-500/70" : "w-1/3 bg-white/10")}
-              />
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   );

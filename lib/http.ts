@@ -26,12 +26,20 @@ export interface HttpResult {
 const agentCache = new Map<string, ProxyAgent>();
 const socksCache = new Map<string, SocksProxyAgent>();
 
+function isIpv6Host(host: string): boolean {
+  return host.includes(":") && !host.startsWith("[");
+}
+
+function hostForUrl(host: string): string {
+  return isIpv6Host(host) ? `[${host}]` : host;
+}
+
 function proxyLabel(p: ProxyRecord): string {
-  return `${p.host}:${p.port}`;
+  return `${hostForUrl(p.host)}:${p.port}`;
 }
 
 function proxyUri(p: ProxyRecord): string {
-  return `${p.protocol}://${p.host}:${p.port}`;
+  return `${p.protocol}://${hostForUrl(p.host)}:${p.port}`;
 }
 
 function basicToken(p: ProxyRecord, password: string): string | null {

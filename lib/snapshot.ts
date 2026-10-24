@@ -88,7 +88,7 @@ export async function buildSnapshot(access?: Access | null): Promise<Snapshot> {
       storage: storageLabel(),
       vercel: Boolean(process.env.VERCEL),
       defaultPassword: usingDefaultPassword(),
-      version: "1.1.0",
+      version: "1.1.1",
       uptimeMs: Date.now() - snapshot.startedAt,
       state: { ...stateStatus(), error: lastStateError(), runner: data.runner ?? null },
     },
