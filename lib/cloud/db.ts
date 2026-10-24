@@ -77,12 +77,25 @@ function toCamel(key: string): string {
   return key.replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
 }
 
+/**
+ * Converte o formato do app (epoch em ms, camelCase) para o do Postgres
+ * (timestamptz em ISO, snake_case). Sem isso o PostgREST recusa números
+ * em colunas `timestamp with time zone`.
+ */
 function encodeRow(row: Row): Row {
   const out: Row = {};
   for (const [key, value] of Object.entries(row)) {
     const column = toSnake(key);
     if (value === undefined) continue;
-    out[column] = value instanceof Date ? value.toISOString() : value;
+    if (value instanceof Date) {
+      out[column] = value.toISOString();
+      continue;
+    }
+    if (typeof value === "number" && TS_KEYS.has(key)) {
+      out[column] = new Date(value).toISOString();
+      continue;
+    }
+    out[column] = value;
   }
   return out;
 }
