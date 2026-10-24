@@ -156,6 +156,8 @@ export function Gate({
                 }}
                 placeholder="ATL-XXXXX-XXXXX-XXXXX"
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
                 spellCheck={false}
                 className={cn(
                   "h-11 w-full rounded-xl border bg-black/25 pl-9 pr-3 font-mono text-[12px] tracking-[0.09em] text-bone-100 outline-none transition-colors backdrop-blur",

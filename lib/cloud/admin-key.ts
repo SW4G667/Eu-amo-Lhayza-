@@ -12,8 +12,12 @@ export function usingFallbackAdminKey(): boolean {
   return !process.env.ADMIN_KEY;
 }
 
+/**
+ * Compara sem diferenciar maiúsculas/minúsculas: teclado de celular e
+ * corretor automático mudam a caixa e trancavam o admin fora do painel.
+ */
 export function matchesAdminKey(input: string): boolean {
-  const candidate = (input || "").trim();
+  const candidate = (input || "").trim().toLowerCase();
   if (!candidate) return false;
-  return safeEqual(candidate, adminKey());
+  return safeEqual(candidate, adminKey().toLowerCase());
 }
