@@ -14,14 +14,14 @@ interface SettingsBody {
 }
 
 export async function GET(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const data = await readData();
   return json({ settings: data.settings });
 }
 
 export async function PATCH(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const body = await readBody<SettingsBody>(request);
   if (!body) return fail("Corpo inválido");

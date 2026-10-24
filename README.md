@@ -4,7 +4,40 @@ Console privado para rastrear usernames raros e receber o aviso no Discord no mo
 
 Não é uma lista estática de nomes: o motor gera candidatos, consulta a plataforma de verdade, registra o resultado, respeita limites de requisição e dispara webhook quando encontra algo dentro do filtro.
 
+
 ---
+
+## Novidades da v1.1 — licenças e revenda
+
+- **Duas portas de entrada**: Discord (OAuth2) ou key `ATL-XXXXX-XXXXX-XXXXX`.
+- **Modelo de revenda**: você gera keys no painel, escolhe plano e dias, e a key só começa
+  a contar quando o cliente ativa. Ao usar a key, o sistema exige o Discord conectado.
+- **Painel admin** (`/admin`) com visão geral, licenças, planos, usuários, plataformas,
+  proxies, eventos (com copiar/baixar log) e ajustes.
+- **Plataformas sob controle**: tudo começa bloqueado com “Em breve”; só aparece para o
+  cliente quando você libera em `/admin → Plataformas`.
+- **Segurança**: cookies HttpOnly assinados (HMAC), key guardada só como hash + AES-256-GCM,
+  rate limit por IP, mesma origem em POST, RLS no Supabase e trilha de auditoria.
+
+Guia completo, passo a passo: **[docs/CONFIGURACAO.md](docs/CONFIGURACAO.md)**.
+
+### Rodar local
+
+```bash
+npm install
+cp .env.example .env.local      # preencha o Supabase ou use ATALAIA_DB_MODE=local
+npm run dev                     # http://localhost:3000
+```
+
+### Atalhos
+
+| Rota | Quem entra |
+| --- | --- |
+| `/` | entrada (Discord ou key) |
+| `/painel` | cliente com licença ativa |
+| `/admin` | key administrativa |
+| `/api/config` | configuração pública da entrada |
+
 
 ## O que ele faz
 

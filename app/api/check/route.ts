@@ -1,4 +1,6 @@
-import { fail, guard, json, readBody } from "@/lib/api";
+import { fail, json, readBody } from "@/lib/api";
+import { isNextResponse, requireAccess } from "@/lib/access";
+import { enabledPlatforms } from "@/lib/cloud/repo";
 import { checkName, type CheckContext } from "@/lib/adapters";
 import { decryptSecret } from "@/lib/crypto";
 import { isValidName } from "@/lib/generator";
@@ -17,11 +19,18 @@ interface CheckBody {
 }
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
-  if (blocked) return blocked;
+  const access = await requireAccess(request);
+  if (isNextResponse(access)) return access;
   const body = await readBody<CheckBody>(request);
   if (!body?.platform || !body.username) return fail("Informe plataforma e nome", 422);
   if (!isPlatformId(body.platform)) return fail("Plataforma inválida", 422);
+
+  if (access.kind !== "admin") {
+    const enabled = await enabledPlatforms();
+    if (!enabled.has(body.platform)) {
+      return fail(`A plataforma ${body.platform} ainda não está liberada. Em breve.`, 423);
+    }
+  }
 
   const username = body.username.trim().toLowerCase();
   if (!isValidName(body.platform, username)) {

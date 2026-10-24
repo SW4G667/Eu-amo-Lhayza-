@@ -117,6 +117,7 @@ export function buildJob(
 
   const job: Job = {
     id: existing?.id ?? uid("job"),
+    owner: existing?.owner ?? null,
     name,
     platform: platformRaw,
     enabled: Boolean(input.enabled ?? existing?.enabled ?? false),

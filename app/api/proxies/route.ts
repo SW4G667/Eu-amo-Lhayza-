@@ -18,7 +18,7 @@ interface ProxyBody {
 }
 
 export async function GET(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const data = await readData();
   return json({
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const body = await readBody<ProxyBody>(request);
   if (!body) return fail("Corpo inválido");

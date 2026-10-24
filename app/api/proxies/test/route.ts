@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const body = await readBody<{ id?: string; all?: boolean }>(request);
   const data = await readData();

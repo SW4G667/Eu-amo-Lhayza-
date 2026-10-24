@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const body = await readBody<{ token?: string; chatId?: string }>(request);
   const data = await readData();

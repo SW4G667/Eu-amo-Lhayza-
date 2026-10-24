@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requestIsAuthed } from "./auth";
+import { sessionFromRequest } from "./session";
 import { setRuntimeStateToken } from "./github-state";
 
 export function json<T>(data: T, init?: ResponseInit): NextResponse {
@@ -30,10 +31,19 @@ function sameOrigin(request: Request): boolean {
 
 export const STATE_TOKEN_HEADER = "x-atalaia-state-token";
 
-export function guard(request: Request): NextResponse | null {
+function isAdminRequest(request: Request): boolean {
+  if (sessionFromRequest(request, "admin")) return true;
+  return requestIsAuthed(request);
+}
+
+/**
+ * Porta de entrada das rotas administrativas do console.
+ * Somente o operador (key mestra, senha legada ou cookie de admin).
+ */
+export async function guard(request: Request): Promise<NextResponse | null> {
   setRuntimeStateToken(request.headers.get(STATE_TOKEN_HEADER));
-  if (!requestIsAuthed(request)) {
-    return fail("Sessão expirada. Entre novamente.", 401);
+  if (!isAdminRequest(request)) {
+    return fail("Acesso restrito ao administrador.", 401);
   }
   if (request.method !== "GET" && !sameOrigin(request)) {
     return fail("Origem não permitida", 403);

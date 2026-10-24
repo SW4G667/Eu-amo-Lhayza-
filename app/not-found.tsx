@@ -20,7 +20,7 @@ export default function NotFound() {
             Ir para o painel
           </Link>
           <Link
-            href="/login"
+            href="/"
             className="inline-flex h-9 items-center rounded-lg border border-white/[0.09] bg-ink-800 px-4 text-[13px] text-bone-100 transition-colors hover:border-white/[0.16] hover:bg-ink-750"
           >
             Entrar

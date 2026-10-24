@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Layers, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, Layers, Loader2, Lock } from "lucide-react";
 import { apiRequest, useConsole } from "@/components/console-provider";
 import { PlatformChip } from "@/components/platform-chip";
 import { Button } from "@/components/ui/button";
@@ -105,6 +105,16 @@ export function JobModal({
 }) {
   const toast = useToast();
   const { snapshot } = useConsole();
+  const allowed = useMemo(() => {
+    const map = new Map((snapshot?.platforms ?? []).map((platform) => [platform.id, platform]));
+    if (!map.size) return new Set(PLATFORM_LIST.map((platform) => platform.id));
+    const isAdmin = snapshot?.me?.kind === "admin";
+    return new Set(
+      PLATFORM_LIST.filter((platform) => isAdmin || map.get(platform.id)?.enabled).map(
+        (platform) => platform.id
+      )
+    );
+  }, [snapshot?.platforms, snapshot?.me?.kind]);
   const [form, setForm] = useState<FormState>(() => defaults());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,16 +285,21 @@ export function JobModal({
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {PLATFORM_LIST.map((platform) => {
               const active = form.platform === platform.id;
+              const open = allowed.has(platform.id);
               return (
                 <button
                   key={platform.id}
                   type="button"
-                  onClick={() => changePlatform(platform.id)}
+                  disabled={!open}
+                  title={open ? platform.name : `${platform.name} · Em breve`}
+                  onClick={() => open && changePlatform(platform.id)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
                     active
                       ? "border-lime-500/40 bg-lime-400/[0.055]"
-                      : "border-white/[0.06] bg-white/[0.015] hover:border-white/[0.13]"
+                      : open
+                        ? "border-white/[0.06] bg-white/[0.015] hover:border-white/[0.13]"
+                        : "cursor-not-allowed border-white/[0.035] bg-white/[0.008] opacity-45"
                   )}
                 >
                   <PlatformChip platform={platform.id} size="sm" />
@@ -298,6 +313,8 @@ export function JobModal({
                   </span>
                   {active ? (
                     <Check className="ml-auto h-3 w-3 shrink-0 text-lime-300" strokeWidth={2.4} />
+                  ) : !open ? (
+                    <Lock className="ml-auto h-3 w-3 shrink-0 text-bone-600" strokeWidth={2} />
                   ) : null}
                 </button>
               );

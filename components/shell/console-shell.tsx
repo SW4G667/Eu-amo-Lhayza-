@@ -7,12 +7,14 @@ import {
   BellRing,
   History,
   LayoutDashboard,
+  Lock,
   LogOut,
   Menu,
   Network,
   Pause,
   Play,
   Radar,
+  ShieldCheck,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -37,14 +39,14 @@ const NAV = [
   {
     group: "Rede",
     items: [
-      { href: "/proxies", label: "Proxies", icon: Network, desc: "Pool de saída e rotação" },
+      { href: "/proxies", label: "Proxies", icon: Network, desc: "Pool de saída e rotação", adminOnly: true },
       { href: "/alertas", label: "Alertas", icon: BellRing, desc: "Webhook do Discord e Telegram" },
     ],
   },
   {
     group: "Sistema",
     items: [
-      { href: "/ajustes", label: "Ajustes", icon: SlidersHorizontal, desc: "Credenciais, motor e dados" },
+      { href: "/ajustes", label: "Ajustes", icon: SlidersHorizontal, desc: "Credenciais, motor e dados", adminOnly: true },
     ],
   },
 ];
@@ -67,6 +69,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
 
   const active = pageInfo(pathname);
+  const isAdmin = snapshot?.me?.kind === "admin";
+  const license = snapshot?.me?.license ?? null;
+  const restricted = !isAdmin && (pathname.startsWith("/proxies") || pathname.startsWith("/ajustes"));
   const paused = snapshot?.settings.engine.paused ?? true;
   const activeJobs = snapshot?.jobs.filter((job) => job.enabled).length ?? 0;
   const spark = useMemo(() => {
@@ -113,7 +118,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = "/";
   }
 
   return (
@@ -146,13 +151,18 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {NAV.map((section) => (
+          {NAV.map((section) => {
+            const items = section.items.filter(
+              (item) => !("adminOnly" in item && item.adminOnly) || isAdmin
+            );
+            if (!items.length) return null;
+            return (
             <div key={section.group} className="mb-5">
               <p className="mb-2 px-2 font-mono text-[9.5px] uppercase tracking-[0.19em] text-bone-500/80">
                 {section.group}
               </p>
               <ul className="space-y-0.5">
-                {section.items.map((item) => {
+                {items.map((item) => {
                   const isActive = pathname.startsWith(item.href);
                   const Icon = item.icon;
                   return (
@@ -188,7 +198,25 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                 })}
               </ul>
             </div>
-          ))}
+            );
+          })}
+          {isAdmin ? (
+            <div className="mb-5">
+              <p className="mb-2 px-2 font-mono text-[9.5px] uppercase tracking-[0.19em] text-bone-500/80">
+                Administração
+              </p>
+              <Link
+                href="/admin"
+                className="group flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[12.5px] text-bone-400 transition-colors hover:bg-white/[0.025] hover:text-bone-100"
+              >
+                <ShieldCheck
+                  className="h-[15px] w-[15px] text-bone-500 group-hover:text-lime-300"
+                  strokeWidth={1.8}
+                />
+                Painel admin
+              </Link>
+            </div>
+          ) : null}
         </nav>
 
         <div className="space-y-3 border-t border-white/[0.05] p-3">
@@ -216,10 +244,16 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <span className="grid h-6 w-6 place-items-center rounded-full border border-white/[0.08] bg-white/[0.04] font-mono text-[10px] text-bone-300">
                 AT
               </span>
-              <div>
-                <p className="text-[11px] leading-tight text-bone-200">operador</p>
-                <p className="font-mono text-[9px] leading-tight text-bone-500">
-                  {snapshot?.runtime.storage ?? "local"}
+              <div className="max-w-[120px]">
+                <p className="truncate text-[11px] leading-tight text-bone-200">
+                  {snapshot?.me?.label ?? "operador"}
+                </p>
+                <p className="truncate font-mono text-[9px] leading-tight text-bone-500">
+                  {isAdmin
+                    ? "administrador"
+                    : license
+                      ? `${license.remainingDays ?? 0} dia(s) restantes`
+                      : "cliente"}
                 </p>
               </div>
             </div>
@@ -268,39 +302,59 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               </Badge>
             </div>
 
-            <Button
-              variant={paused ? "primary" : "secondary"}
-              size="sm"
-              loading={busy}
-              onClick={() => void toggleEngine()}
-              className="shrink-0"
-            >
-              {paused ? (
-                <>
-                  <Play className="h-3 w-3" strokeWidth={2.4} /> Retomar
-                </>
-              ) : (
-                <>
-                  <Pause className="h-3 w-3" strokeWidth={2.4} /> Pausar
-                </>
-              )}
-            </Button>
+            {isAdmin ? (
+              <Button
+                variant={paused ? "primary" : "secondary"}
+                size="sm"
+                loading={busy}
+                onClick={() => void toggleEngine()}
+                className="shrink-0"
+              >
+                {paused ? (
+                  <>
+                    <Play className="h-3 w-3" strokeWidth={2.4} /> Retomar
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-3 w-3" strokeWidth={2.4} /> Pausar
+                  </>
+                )}
+              </Button>
+            ) : (
+              <span className="hidden shrink-0 items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.03] px-2 py-1 font-mono text-[9.5px] uppercase tracking-[0.1em] text-bone-500 sm:flex">
+                <span className={paused ? "h-1.5 w-1.5 rounded-full bg-amberglow" : "h-1.5 w-1.5 rounded-full bg-lime-400"} />
+                {paused ? "pausado" : "operando"}
+              </span>
+            )}
           </div>
         </header>
 
         <main key={pathname} className="mx-auto w-full max-w-[1280px] animate-fade-up px-4 py-5 sm:px-6 sm:py-7">
-          {snapshot?.runtime.defaultPassword ? (
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amberglow/25 bg-amberglow/[0.06] px-4 py-2.5">
+          {license && license.remainingDays !== null && license.remainingDays <= 3 ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amberglow/25 bg-amberglow/[0.06] px-4 py-2.5">
               <p className="text-[12px] text-amberglow">
-                Senha padrão ativa. Defina <code className="font-mono">APP_PASSWORD</code> no ambiente
-                antes de expor este painel.
+                Sua licença expira em {license.remainingDays} dia(s). Renove com o administrador para
+                não perder os monitores.
               </p>
-              <Link href="/ajustes" className="font-mono text-[10px] uppercase tracking-wider text-amberglow underline-offset-4 hover:underline">
-                revisar
-              </Link>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-amberglow">
+                {license.prefix}
+              </span>
             </div>
           ) : null}
-          {children}
+          {restricted ? (
+            <div className="panel flex flex-col items-center justify-center px-6 py-16 text-center">
+              <span className="grid h-11 w-11 place-items-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-bone-500">
+                <Lock className="h-4 w-4" strokeWidth={1.8} />
+              </span>
+              <p className="mt-3 text-[13px] text-bone-100">Área do administrador</p>
+              <p className="mt-1 max-w-[320px] text-[11.5px] leading-relaxed text-bone-500">
+                Proxies e ajustes avançados são operados pelo dono do sistema. Fale com o
+                administrador se precisar de algo aqui.
+              </p>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>

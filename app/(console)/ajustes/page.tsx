@@ -527,7 +527,7 @@ export default function AjustesPage() {
                 className="w-full justify-start"
                 onClick={async () => {
                   await fetch("/api/auth/logout", { method: "POST" });
-                  window.location.href = "/login";
+                  window.location.href = "/";
                 }}
               >
                 <LogOut className="h-3.5 w-3.5" strokeWidth={1.9} />

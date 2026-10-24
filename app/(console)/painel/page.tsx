@@ -1,614 +1,495 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
-  ArrowRight,
   ArrowUpRight,
-  CheckCircle2,
-  CircleDashed,
-  Cloud,
-  Crosshair,
-  Github,
+  Check,
+  Copy,
+  Eraser,
+  Gauge,
+  Loader2,
+  Lock,
+  Plus,
   Radar,
   Search,
-  ShieldAlert,
   Terminal,
 } from "lucide-react";
-import { ActivityBars, Sparkline } from "@/components/charts";
 import { apiRequest, useConsole } from "@/components/console-provider";
-import { PlatformChip } from "@/components/platform-chip";
-import { STATUS_META } from "@/components/status";
-import { Clock, TimeAgo } from "@/components/time";
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy";
-import { Input, Select } from "@/components/ui/form";
-import { Badge, EmptyState, Panel, PanelHeader, SectionLabel, StatusDot } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { PLATFORM_LIST, platformMeta } from "@/lib/platforms";
-import type { CheckStatus, LogEntry, PlatformId } from "@/lib/types";
-import { cn, compactNumber, nfmt } from "@/lib/utils";
+import { platformMeta } from "@/lib/platforms";
+import type { CheckStatus, LogEntry } from "@/lib/types";
+import { cn, compactNumber, nfmt, timeAgo } from "@/lib/utils";
 
-const LOG_TONE: Record<LogEntry["level"], "ok" | "idle" | "danger" | "info"> = {
-  available: "ok",
-  taken: "idle",
-  error: "danger",
-  info: "info",
+const LEVEL_STYLE: Record<LogEntry["level"], { tone: string; tag: string }> = {
+  available: { tone: "text-mint", tag: "LIVRE" },
+  taken: { tone: "text-bone-500", tag: "OCUPADO" },
+  error: { tone: "text-ember", tag: "ERRO" },
+  info: { tone: "text-[#AEB9FF]", tag: "INFO" },
 };
 
-interface QuickResult {
-  username: string;
-  platform: PlatformId;
-  status: CheckStatus;
-  detail: string;
-  latencyMs: number;
-  proxy: string | null;
-  score: number;
-  tier: string;
-  reasons: string[];
+function stamp(ts: number): string {
+  return new Date(ts).toLocaleTimeString("pt-BR", { hour12: false });
 }
 
 export default function PainelPage() {
-  const { snapshot } = useConsole();
-  const jobs = snapshot?.jobs ?? [];
+  const { snapshot, refresh } = useConsole();
+  const toast = useToast();
+  const [query, setQuery] = useState("");
+  const [clearing, setClearing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const consoleRef = useRef<HTMLDivElement>(null);
+
+  const hits = snapshot?.hits ?? [];
   const logs = snapshot?.logs ?? [];
   const stats = snapshot?.stats;
   const paused = snapshot?.settings.engine.paused ?? true;
-  const state = snapshot?.runtime.state;
-  const runnerBeat = state?.runner ?? null;
-  const githubLive = state?.driver === "github" && state.writable;
-  const activeJobs = jobs.filter((job) => job.enabled).length;
+  const isAdmin = snapshot?.me?.kind === "admin";
+  const license = snapshot?.me?.license ?? null;
+  const platforms = snapshot?.platforms ?? [];
 
-  const lastMinute = stats?.buckets.at(-1)?.checks ?? 0;
-  const hitRate = stats?.checks ? (stats.available / stats.checks) * 100 : 0;
-  const issues = (stats?.errors ?? 0) + (stats?.rateLimited ?? 0);
-  const sparkData = useMemo(() => {
-    const buckets = stats?.buckets.slice(-24).map((bucket) => bucket.checks) ?? [];
-    return buckets.length ? buckets : [0, 0, 0, 0, 0, 0];
-  }, [stats?.buckets]);
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return hits;
+    return hits.filter(
+      (hit) =>
+        hit.username.includes(term) ||
+        hit.platform.includes(term) ||
+        hit.jobName.toLowerCase().includes(term)
+    );
+  }, [hits, query]);
 
-  const steps = [
-    {
-      done: Boolean(snapshot?.credentials.discord.configured),
-      title: "Conectar token do Discord",
-      detail: "Sem token o Discord não responde se o nome está livre.",
-      href: "/ajustes",
-    },
-    {
-      done: (snapshot?.proxies.length ?? 0) > 0,
-      title: "Adicionar proxies",
-      detail: "Rotação de saída evita bloqueio por IP.",
-      href: "/proxies",
-    },
-    {
-      done: Boolean(snapshot?.settings.alerts.discordEnabled && snapshot?.settings.alerts.discordWebhook),
-      title: "Ativar webhook",
-      detail: "Receba o nome livre com link de captura.",
-      href: "/alertas",
-    },
-    {
-      done: activeJobs > 0,
-      title: "Ligar um monitor",
-      detail: "Escolha plataforma, comprimento e intervalo.",
-      href: "/monitores",
-    },
-  ];
-  const pendingSteps = steps.filter((step) => !step.done).length;
+  useEffect(() => {
+    if (!autoScroll || !consoleRef.current) return;
+    consoleRef.current.scrollTop = 0;
+  }, [logs, autoScroll]);
+
+  const logText = useMemo(
+    () =>
+      logs
+        .slice()
+        .reverse()
+        .map(
+          (entry) =>
+            `[${stamp(entry.ts)}] ${LEVEL_STYLE[entry.level].tag.padEnd(7)} ${
+              entry.platform
+            } ${entry.username ?? "-"} :: ${entry.message}`
+        )
+        .join("\n"),
+    [logs]
+  );
+
+  async function copyLog() {
+    try {
+      await navigator.clipboard.writeText(logText || "console vazio");
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+      toast.push("Log copiado para a área de transferência.", "success");
+    } catch {
+      toast.push("O navegador bloqueou a cópia.", "error");
+    }
+  }
+
+  async function clearLog() {
+    setClearing(true);
+    const result = await apiRequest<{ ok: boolean; removed: number }>("/api/logs", {
+      method: "DELETE",
+    });
+    setClearing(false);
+    if (!result.ok) {
+      toast.push(result.error, "error");
+      return;
+    }
+    toast.push(`Console limpo (${result.data.removed} linha(s)).`, "info");
+    await refresh();
+  }
+
+  async function toggleEngine() {
+    const result = await apiRequest<{ ok: boolean }>("/api/engine", {
+      method: "POST",
+      body: JSON.stringify({ action: paused ? "start" : "pause" }),
+    });
+    if (!result.ok) {
+      toast.push(result.error, "error");
+      return;
+    }
+    await refresh();
+  }
+
+  const enabledJobs = (snapshot?.jobs ?? []).filter((job) => job.enabled).length;
+  const available = stats?.available ?? 0;
+  const checks = stats?.checks ?? 0;
+  const efficiency = checks > 0 ? (available / checks) * 100 : 0;
 
   return (
-    <div className="space-y-5">
-      {githubLive ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-lime/[0.14] bg-lime/[0.035] px-3.5 py-2.5">
-          <span className="flex items-center gap-2 text-[11.5px] font-medium text-lime/90">
-            <Github className="h-3.5 w-3.5" strokeWidth={1.9} />
-            Motor 24/7 no GitHub Actions
-          </span>
-          <span className="font-mono text-[10px] text-bone-500">
-            {state?.repo}@{state?.branch}
-          </span>
-          <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-bone-400">
-            {runnerBeat ? (
-              <>
-                <span className="h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_2px_rgba(190,242,100,0.35)]" />
-                runner ativo {<TimeAgo ts={runnerBeat.lastSeenAt} />}
-              </>
-            ) : (
-              <>
-                <span className="h-1.5 w-1.5 rounded-full bg-bone-600" />
-                aguardando primeiro ciclo
-              </>
+    <div className="space-y-4">
+      {/* faixa de status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              paused ? "bg-amberglow" : "bg-lime-400 animate-pulse-dot"
             )}
-          </span>
-        </div>
-      ) : snapshot?.runtime.vercel ? (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amberglow/20 bg-amberglow/[0.045] px-3.5 py-2.5">
-          <Cloud className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amberglow/70" strokeWidth={1.8} />
-          <p className="text-[11.5px] leading-relaxed text-bone-300/90">
-            <span className="font-medium text-amberglow/90">Sem motor persistente.</span> Nesta instância os
-            monitores só checam com a aba aberta. Conecte o repositório do GitHub em{" "}
-            <Link href="/ajustes" className="underline decoration-white/20 underline-offset-2 hover:text-bone-50">
-              Ajustes
-            </Link>{" "}
-            para a varredura rodar 24/7 nos runners.
+          />
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-bone-400">
+            {paused ? "varredura pausada" : "varredura em andamento"}
+          </p>
+          <span className="h-3 w-px bg-white/[0.08]" />
+          <p className="font-mono text-[10px] text-bone-600">
+            {snapshot?.runtime.vercel ? "nuvem · vercel" : snapshot?.runtime.storage ?? "local"}
           </p>
         </div>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="checagens"
-          value={nfmt(stats?.checks ?? 0)}
-          detail={`${lastMinute}/min`}
-          icon={<Activity className="h-3.5 w-3.5" strokeWidth={1.8} />}
-          spark={sparkData}
-        />
-        <Stat
-          label="disponíveis"
-          value={nfmt(stats?.available ?? 0)}
-          detail={`taxa ${hitRate.toFixed(1).replace(".", ",")}%`}
-          icon={<Crosshair className="h-3.5 w-3.5" strokeWidth={1.8} />}
-          accent="mint"
-          spark={sparkData.map((value, index) => (index % 3 === 0 ? value * 0.2 : value * 0.05))}
-        />
-        <Stat
-          label="monitores ativos"
-          value={`${activeJobs}/${jobs.length}`}
-          detail={paused ? "motor pausado" : "motor ativo"}
-          icon={<Radar className="h-3.5 w-3.5" strokeWidth={1.8} />}
-          accent={paused ? "muted" : "lime"}
-          pulse={!paused && activeJobs > 0}
-        />
-        <Stat
-          label="falhas e limites"
-          value={nfmt(issues)}
-          detail={`${nfmt(stats?.rateLimited ?? 0)} limites`}
-          icon={<ShieldAlert className="h-3.5 w-3.5" strokeWidth={1.8} />}
-          accent={issues > 0 ? "ember" : "muted"}
-        />
+        {license ? (
+          <p className="font-mono text-[10px] text-bone-500">
+            licença {license.prefix} ·{" "}
+            {license.remainingDays !== null ? `${license.remainingDays} dia(s)` : license.status}
+          </p>
+        ) : null}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Panel>
-            <PanelHeader
-              title="Fluxo ao vivo"
-              subtitle="Cada linha é uma checagem real feita pelo motor"
-              icon={<Terminal className="h-4 w-4" strokeWidth={1.7} />}
-              action={
-                <>
-                  {paused ? (
-                    <Badge tone="muted" dot>
-                      pausado
-                    </Badge>
-                  ) : (
-                    <Badge tone="lime" dot>
-                      ao vivo
-                    </Badge>
-                  )}
-                  <Link
-                    href="/monitores"
-                    className="font-mono text-[10px] uppercase tracking-wider text-bone-400 transition-colors hover:text-bone-100"
-                  >
-                    monitores
-                  </Link>
-                </>
-              }
-            />
-            {logs.length === 0 ? (
-              <EmptyState
-                icon={<Terminal className="h-4 w-4" />}
-                title="Nenhuma checagem ainda"
-                description="Crie um monitor e inicie o motor. As checagens aparecem aqui em tempo real, com latência e proxy usado."
-                action={
-                  <Link href="/monitores">
-                    <Button size="sm" variant="primary">
-                      Configurar monitor
-                    </Button>
-                  </Link>
-                }
-              />
-            ) : (
-              <div className="divide-y divide-white/[0.035]">
-                {logs.slice(0, 13).map((log) => (
-                  <div
-                    key={log.id}
-                    className="grid animate-row-in grid-cols-[58px_10px_minmax(0,1fr)_auto] items-center gap-2.5 px-4 py-2 sm:grid-cols-[62px_10px_minmax(0,1fr)_86px_64px] sm:px-5"
-                  >
-                    <Clock ts={log.ts} className="font-mono text-[10.5px] tabular-nums text-bone-500" />
-                    <StatusDot tone={LOG_TONE[log.level]} />
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className="truncate font-mono text-[12px] text-bone-100">
-                        {log.username ?? "sistema"}
-                      </span>
-                      {log.platform ? <PlatformChip platform={log.platform} size="sm" /> : null}
-                      <span className="hidden truncate text-[11px] text-bone-500 sm:inline">
-                        {log.message}
-                      </span>
-                    </div>
-                    <span className="hidden justify-self-end font-mono text-[10.5px] tabular-nums text-bone-500 sm:block">
-                      {log.latencyMs ? `${log.latencyMs} ms` : "—"}
-                    </span>
-                    <span className="hidden justify-self-end truncate font-mono text-[10px] text-bone-500 sm:block">
-                      {log.proxy ?? "direto"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center justify-between border-t border-white/[0.05] px-5 py-2.5">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-bone-500">
-                últimas {Math.min(logs.length, 13)} de {Math.max(logs.length, 0)} em memória
-              </span>
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-bone-500">
-                atualiza a cada 2s
+      {/* métricas */}
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <Metric label="monitores ativos" value={`${enabledJobs}`} hint={`de ${snapshot?.jobs.length ?? 0}`} />
+        <Metric label="checagens" value={compactNumber(checks)} hint="histórico total" />
+        <Metric label="achados" value={nfmt(available)} hint="usernames livres" accent />
+        <Metric label="acerto" value={`${efficiency.toFixed(2)}%`} hint="livres por checagem" />
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+        {/* painel de achados */}
+        <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#0A0C0C]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.055] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Check className="h-3.5 w-3.5 text-lime-300" strokeWidth={2.4} />
+              <h2 className="font-mono text-[10px] uppercase tracking-[0.17em] text-bone-200">
+                usernames disponíveis encontrados
+              </h2>
+              <span className="rounded-full border border-white/[0.07] bg-white/[0.03] px-1.5 py-[1px] font-mono text-[9px] text-bone-400">
+                {filtered.length}
               </span>
             </div>
-          </Panel>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <Panel className="p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <SectionLabel>atividade</SectionLabel>
-                  <p className="mt-1 text-[12px] text-bone-500">Últimos 30 minutos</p>
-                </div>
-                <span className="font-mono text-[10px] text-bone-500">
-                  pico {compactNumber(Math.max(0, ...(stats?.buckets.map((bucket) => bucket.checks) ?? [0])))}/min
-                </span>
+            <div className="flex items-center gap-1.5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-bone-600" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="filtrar"
+                  className="h-7 w-[120px] rounded-md border border-white/[0.07] bg-ink-950/70 pl-7 pr-2 font-mono text-[11px] text-bone-100 outline-none placeholder:text-bone-600 focus:border-lime-500/40"
+                />
               </div>
-              <ActivityBars buckets={stats?.buckets ?? []} className="mt-3" />
-              <div className="mt-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.12em] text-bone-500">
-                <span>−30min</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-mint" /> achado
-                </span>
-                <span>agora</span>
-              </div>
-            </Panel>
+              <Link
+                href="/monitores"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 text-[11px] text-bone-200 transition-colors hover:bg-white/[0.07]"
+              >
+                <Plus className="h-3 w-3" strokeWidth={2.4} />
+                monitor
+              </Link>
+            </div>
+          </div>
 
-            <Panel>
-              <PanelHeader
-                title="Por plataforma"
-                subtitle="Volume acumulado"
-                className="px-4 py-3"
-                action={
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="flex h-full min-h-[300px] flex-col items-center justify-center px-6 text-center">
+                <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/[0.06] bg-white/[0.02] text-bone-500">
+                  <Radar className="h-4 w-4" strokeWidth={1.7} />
+                </span>
+                <p className="mt-3 text-[12.5px] text-bone-300">
+                  {hits.length ? "Nada bate com o filtro." : "Nenhum username encontrado ainda."}
+                </p>
+                <p className="mt-1 max-w-[280px] text-[11px] leading-relaxed text-bone-500">
+                  {hits.length
+                    ? "Limpe a busca para ver todos os achados."
+                    : "Crie um monitor e ative o motor. Os nomes livres aparecem aqui em tempo real."}
+                </p>
+                {!hits.length ? (
                   <Link
                     href="/monitores"
-                    className="text-bone-500 transition-colors hover:text-bone-100"
-                    aria-label="Ver monitores"
+                    className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md bg-bone-50 px-3 text-[11.5px] font-medium text-ink-950 hover:bg-white"
                   >
-                    <ArrowUpRight className="h-3.5 w-3.5" />
+                    Criar monitor
+                    <ArrowUpRight className="h-3 w-3" strokeWidth={2.4} />
                   </Link>
-                }
-              />
-              <div className="space-y-2.5 px-4 py-3.5">
-                {Object.entries(stats?.byPlatform ?? {}).length === 0 ? (
-                  <p className="py-6 text-center text-[11.5px] text-bone-500">
-                    Nenhuma plataforma acionada ainda.
-                  </p>
-                ) : (
-                  Object.entries(stats?.byPlatform ?? {})
-                    .sort((a, b) => b[1].checks - a[1].checks)
-                    .slice(0, 5)
-                    .map(([platform, values]) => {
-                      const max = Math.max(
-                        1,
-                        ...Object.values(stats?.byPlatform ?? {}).map((entry) => entry.checks)
-                      );
-                      return (
-                        <div key={platform} className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <PlatformChip platform={platform as PlatformId} showName size="sm" />
-                            <span className="font-mono text-[10.5px] tabular-nums text-bone-400">
-                              {nfmt(values.checks)}
-                              {values.available > 0 ? (
-                                <span className="ml-1.5 text-mint">+{values.available}</span>
-                              ) : null}
-                            </span>
-                          </div>
-                          <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.05]">
-                            <div
-                              className="h-full rounded-full bg-bone-500/60"
-                              style={{ width: `${Math.max(3, (values.checks / max) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })
-                )}
+                ) : null}
               </div>
-            </Panel>
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          {pendingSteps > 0 ? <SetupSteps steps={steps} /> : null}
-
-          <QuickCheck />
-
-          <Panel>
-            <PanelHeader
-              title="Últimos achados"
-              subtitle={`${snapshot?.hits.length ?? 0} nomes livres registrados`}
-              className="px-4 py-3"
-              action={
-                <Link
-                  href="/historico"
-                  className="font-mono text-[10px] uppercase tracking-wider text-bone-400 hover:text-bone-100"
-                >
-                  histórico
-                </Link>
-              }
-            />
-            {(snapshot?.hits.length ?? 0) === 0 ? (
-              <p className="px-4 py-6 text-center text-[11.5px] text-bone-500">
-                Nenhum nome livre encontrado até agora.
-              </p>
             ) : (
               <ul className="divide-y divide-white/[0.035]">
-                {snapshot?.hits.slice(0, 5).map((hit) => (
-                  <li key={hit.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-mono text-[12.5px] text-bone-50">
-                        {hit.username}
+                {filtered.map((hit) => {
+                  const meta = platformMeta(hit.platform);
+                  return (
+                    <li
+                      key={hit.id}
+                      className="group flex animate-row-in items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.02]"
+                    >
+                      <span
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-[5px] border font-mono text-[8.5px]"
+                        style={{
+                          color: meta.accent,
+                          borderColor: `${meta.accent}33`,
+                          backgroundColor: `${meta.accent}12`,
+                        }}
+                      >
+                        {meta.short}
                       </span>
-                      <PlatformChip platform={hit.platform} size="sm" />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="font-mono text-[10.5px] text-mint">{hit.score}</span>
-                      <TimeAgo ts={hit.foundAt} className="font-mono text-[10px] text-bone-500" />
-                      <CopyButton value={hit.username} compact />
-                    </div>
-                  </li>
-                ))}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-[12.5px] text-bone-100">
+                          @{hit.username}
+                        </p>
+                        <p className="truncate text-[10.5px] text-bone-600">
+                          {hit.jobName} · {timeAgo(hit.foundAt)}
+                          {hit.latencyMs ? ` · ${hit.latencyMs}ms` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "hidden shrink-0 rounded-full border px-1.5 py-[1px] font-mono text-[9px] sm:inline",
+                          hit.score >= 80
+                            ? "border-lime-500/30 bg-lime-400/[0.08] text-lime-300"
+                            : hit.score >= 55
+                              ? "border-amberglow/25 bg-amberglow/[0.07] text-amberglow"
+                              : "border-white/[0.07] bg-white/[0.03] text-bone-400"
+                        )}
+                        title="Pontuação do nome"
+                      >
+                        {hit.score}
+                      </span>
+                      <CopyButton value={hit.username} compact className="shrink-0" />
+                      <a
+                        href={meta.claimUrl(hit.username)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.07] bg-white/[0.02] text-bone-400 transition-colors hover:border-white/[0.16] hover:text-bone-100"
+                        title={`Abrir ${meta.name}`}
+                      >
+                        <ArrowUpRight className="h-3 w-3" strokeWidth={2} />
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             )}
-          </Panel>
+          </div>
 
-          {snapshot?.runtime.vercel ? (
-            <div className="rounded-xl border border-[#8B9CFF]/20 bg-[#8B9CFF]/[0.045] p-4">
-              <div className="flex items-center gap-2">
-                <Cloud className="h-3.5 w-3.5 text-[#AEB9FF]" strokeWidth={1.8} />
-                <p className="text-[11.5px] font-medium text-[#C3CBFF]">Execução em nuvem</p>
-              </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-bone-400">
-                Na Vercel não existe processo contínuo. A varredura roda enquanto este painel estiver
-                aberto e em rajadas via <code className="font-mono">/api/cron</code>. Para operar 24/7,
-                rode o worker local ou em um VPS.
+          <div className="flex items-center justify-between border-t border-white/[0.055] px-4 py-2">
+            <p className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-bone-600">
+              ordenado por descoberta
+            </p>
+            <Link
+              href="/historico"
+              className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-bone-500 transition-colors hover:text-bone-200"
+            >
+              histórico completo →
+            </Link>
+          </div>
+        </section>
+
+        {/* console de eventos */}
+        <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#080A0A]">
+          <div className="flex items-center justify-between gap-2 border-b border-white/[0.055] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-bone-400" strokeWidth={2} />
+              <h2 className="font-mono text-[10px] uppercase tracking-[0.17em] text-bone-200">
+                console de eventos
+              </h2>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void copyLog()}
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] px-1.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-bone-400 transition-colors hover:border-white/[0.16] hover:text-bone-100"
+                title="Copiar log completo"
+              >
+                {copied ? <Check className="h-2.5 w-2.5 text-mint" /> : <Copy className="h-2.5 w-2.5" />}
+                copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => void clearLog()}
+                disabled={clearing || logs.length === 0}
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] px-1.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-bone-400 transition-colors hover:border-ember/30 hover:text-[#FFB4A2] disabled:opacity-40"
+                title="Limpar logs"
+              >
+                {clearing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Eraser className="h-2.5 w-2.5" />}
+                limpar
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref={consoleRef}
+            className="h-[330px] flex-1 overflow-y-auto px-3 py-2 font-mono text-[10.5px] leading-[1.55]"
+          >
+            {logs.length === 0 ? (
+              <p className="px-1 py-2 text-bone-600">
+                <span className="text-lime-500/70">$</span> console ocioso — aguardando eventos...
+              </p>
+            ) : (
+              logs.map((entry) => (
+                <div key={entry.id} className="flex gap-1.5 py-[1px]">
+                  <span className="shrink-0 text-bone-700">{stamp(entry.ts)}</span>
+                  <span className={cn("shrink-0", LEVEL_STYLE[entry.level].tone)}>
+                    {LEVEL_STYLE[entry.level].tag}
+                  </span>
+                  <span className="min-w-0 text-bone-500">
+                    <span className="text-bone-600">[{entry.platform}]</span>{" "}
+                    {entry.username ? (
+                      <span className="text-bone-300">{entry.username}</span>
+                    ) : null}{" "}
+                    {entry.message}
+                    {entry.latencyMs ? (
+                      <span className="text-bone-700"> ({entry.latencyMs}ms)</span>
+                    ) : null}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-white/[0.055] px-4 py-2">
+            <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-bone-600">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={(event) => setAutoScroll(event.target.checked)}
+                className="h-3 w-3 accent-lime-500"
+              />
+              seguir topo
+            </label>
+            <span className="font-mono text-[9.5px] text-bone-600">{logs.length} linhas</span>
+          </div>
+        </section>
+      </div>
+
+      {/* rodapé: plataformas + ações */}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <section className="rounded-xl border border-white/[0.06] bg-[#0A0C0C] p-3.5">
+          <div className="mb-2.5 flex items-center justify-between">
+            <h2 className="font-mono text-[9.5px] uppercase tracking-[0.17em] text-bone-400">
+              plataformas
+            </h2>
+            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-bone-600">
+              {platforms.filter((item) => item.enabled).length} de {platforms.length} liberadas
+            </span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {platforms.map((platform) => (
+              <button
+                key={platform.id}
+                type="button"
+                onClick={() =>
+                  !platform.enabled &&
+                  toast.push(`${platform.name} chega em breve. O admin libera no painel.`, "info")
+                }
+                className={cn(
+                  "flex min-w-[72px] flex-col items-center gap-1 rounded-lg border px-2 py-2 transition-colors",
+                  platform.enabled
+                    ? "border-white/[0.08] bg-white/[0.035] hover:bg-white/[0.06]"
+                    : "cursor-not-allowed border-white/[0.035] bg-white/[0.01] opacity-40"
+                )}
+                title={platform.enabled ? `${platform.name} liberado` : `${platform.name} · ${platform.note || "Em breve"}`}
+              >
+                <span
+                  className="grid h-5 w-5 place-items-center rounded-[5px] border font-mono text-[8px]"
+                  style={
+                    platform.enabled
+                      ? {
+                          color: platform.accent,
+                          borderColor: `${platform.accent}33`,
+                          backgroundColor: `${platform.accent}12`,
+                        }
+                      : { color: "#4C554B", borderColor: "rgba(255,255,255,0.05)" }
+                  }
+                >
+                  {platform.short}
+                </span>
+                <span className="flex items-center gap-1 font-mono text-[8px] uppercase tracking-[0.06em] text-bone-500">
+                  {!platform.enabled ? <Lock className="h-2 w-2" strokeWidth={2.2} /> : null}
+                  {platform.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-[#0A0C0C] p-3.5">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-3.5 w-3.5 text-bone-400" strokeWidth={2} />
+            <h2 className="font-mono text-[9.5px] uppercase tracking-[0.17em] text-bone-400">
+              controle
+            </h2>
+          </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => void toggleEngine()}
+              className={cn(
+                "flex h-9 items-center justify-center gap-1.5 rounded-lg text-[12px] font-medium transition-colors",
+                paused
+                  ? "bg-lime-400 text-ink-950 hover:bg-lime-300"
+                  : "border border-white/[0.09] bg-white/[0.04] text-bone-100 hover:bg-white/[0.07]"
+              )}
+            >
+              {paused ? "Retomar motor" : "Pausar motor"}
+            </button>
+          ) : (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+              <p className="text-[11px] leading-relaxed text-bone-500">
+                O motor é operado pelo administrador. Seus monitores rodam enquanto estiverem
+                ativos.
               </p>
             </div>
+          )}
+          <Link
+            href="/monitores"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.04] text-[12px] text-bone-100 transition-colors hover:bg-white/[0.07]"
+          >
+            Gerenciar monitores
+          </Link>
+          {isAdmin ? (
+            <Link
+              href="/admin"
+              className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/[0.06] text-[12px] text-bone-400 transition-colors hover:text-bone-100"
+            >
+              Painel administrativo
+            </Link>
           ) : null}
-        </div>
+        </section>
       </div>
+
+      <p className="pb-2 text-center font-mono text-[9px] uppercase tracking-[0.14em] text-bone-700">
+        {snapshot?.me ? `${snapshot.me.kind === "admin" ? "operador" : "cliente"} · ${snapshot.me.label}` : ""}
+        {" · "}v{snapshot?.runtime.version ?? "1.1.0"}
+      </p>
     </div>
   );
 }
 
-function Stat({
+function Metric({
   label,
   value,
-  detail,
-  icon,
-  spark,
-  accent = "bone",
-  pulse,
+  hint,
+  accent,
 }: {
   label: string;
   value: string;
-  detail: string;
-  icon: React.ReactNode;
-  spark?: number[];
-  accent?: "bone" | "mint" | "lime" | "ember" | "muted";
-  pulse?: boolean;
-}) {
-  const accents = {
-    bone: "text-bone-50",
-    mint: "text-mint",
-    lime: "text-lime-300",
-    ember: "text-[#FFA48E]",
-    muted: "text-bone-300",
-  };
-  return (
-    <Panel className="relative overflow-hidden px-4 py-3.5">
-      <div className="flex items-center justify-between">
-        <span className="label-mono">{label}</span>
-        <span className={cn("flex items-center gap-1.5 text-bone-500", accent === "ember" && "text-ember")}>
-          {pulse ? <StatusDot tone="ok" pulse /> : icon}
-        </span>
-      </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <span className={cn("font-mono text-[26px] leading-none tracking-[-0.02em] mono-num", accents[accent])}>
-          {value}
-        </span>
-        <span className="mb-[2px] font-mono text-[10px] text-bone-500">{detail}</span>
-      </div>
-      {spark ? (
-        <div className="-mx-1 mt-2 opacity-80">
-          <Sparkline data={spark} height={22} className="h-[22px]" stroke={accent === "mint" ? "#63E6A4" : "#CBEF6E"} />
-        </div>
-      ) : null}
-    </Panel>
-  );
-}
-
-function SetupSteps({
-  steps,
-}: {
-  steps: { done: boolean; title: string; detail: string; href: string }[];
+  hint: string;
+  accent?: boolean;
 }) {
   return (
-    <Panel>
-      <PanelHeader
-        title="Primeiros passos"
-        subtitle="Três minutos para a primeira varredura"
-        className="px-4 py-3"
-        action={<Badge tone="lime">{steps.filter((step) => step.done).length}/{steps.length}</Badge>}
-      />
-      <ul className="divide-y divide-white/[0.035]">
-        {steps.map((step) => (
-          <li key={step.title}>
-            <Link
-              href={step.href}
-              className="group flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.015]"
-            >
-              {step.done ? (
-                <CheckCircle2 className="mt-[1px] h-4 w-4 shrink-0 text-mint" strokeWidth={1.8} />
-              ) : (
-                <CircleDashed className="mt-[1px] h-4 w-4 shrink-0 text-bone-500" strokeWidth={1.6} />
-              )}
-              <div className="min-w-0 flex-1">
-                <p
-                  className={cn(
-                    "text-[12px] font-medium",
-                    step.done ? "text-bone-400 line-through decoration-bone-600/60" : "text-bone-100"
-                  )}
-                >
-                  {step.title}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-bone-500">{step.detail}</p>
-              </div>
-              <ArrowRight className="mt-1 h-3 w-3 shrink-0 text-bone-600 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </Panel>
-  );
-}
-
-function QuickCheck() {
-  const toast = useToast();
-  const { snapshot } = useConsole();
-  const [platform, setPlatform] = useState<PlatformId>(() =>
-    snapshot?.credentials.discord.configured ? "discord" : "github"
-  );
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<QuickResult | null>(null);
-  const meta = platformMeta(platform);
-  const missingCredential = meta.requires === "discord"
-    ? !snapshot?.credentials.discord.configured
-    : meta.requires === "twitch"
-      ? !snapshot?.credentials.twitch.configured
-      : false;
-
-  async function run() {
-    const username = name.trim().toLowerCase().replace(/^@/, "");
-    if (!username) {
-      toast.push("Digite um nome para checar.", "error");
-      return;
-    }
-    setLoading(true);
-    setResult(null);
-    const response = await apiRequest<QuickResult>("/api/check", {
-      method: "POST",
-      body: JSON.stringify({ platform, username }),
-    });
-    setLoading(false);
-    if (!response.ok) {
-      toast.push(response.error, "error");
-      return;
-    }
-    setResult(response.data);
-  }
-
-  const statusView = result
-    ? result.status === "available"
-      ? { text: "livre", tone: "mint" as const }
-      : result.status === "taken"
-        ? { text: "em uso", tone: "neutral" as const }
-        : result.status === "unconfigured"
-          ? { text: "sem credencial", tone: "warn" as const }
-          : { text: "não concluído", tone: "danger" as const }
-    : null;
-
-  return (
-    <Panel>
-      <PanelHeader
-        title="Checagem avulsa"
-        subtitle="Uma consulta, sem criar monitor"
-        className="px-4 py-3"
-        icon={<Search className="h-4 w-4" strokeWidth={1.7} />}
-      />
-      <div className="space-y-3 p-4">
-        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-2">
-          <Select value={platform} onChange={(event) => setPlatform(event.target.value as PlatformId)}>
-            {PLATFORM_LIST.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </Select>
-          <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[12px] text-bone-500">
-              @
-            </span>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void run();
-              }}
-              placeholder={`${meta.minLength}–${meta.maxLength} caracteres`}
-              className="pl-7 font-mono"
-              maxLength={meta.maxLength}
-            />
-          </div>
-        </div>
-        {missingCredential ? (
-          <p className="rounded-md border border-amberglow/20 bg-amberglow/[0.05] px-2.5 py-1.5 text-[10.5px] leading-snug text-amberglow/90">
-            {meta.name} exige credencial.{" "}
-            <a href="/ajustes" className="underline underline-offset-2">Configurar agora</a>.
-          </p>
-        ) : null}
-        <Button variant="primary" size="sm" className="w-full" loading={loading} onClick={() => void run()}>
-          Verificar disponibilidade
-        </Button>
-
-        {result && statusView ? (
-          <div className="animate-fade-up rounded-lg border border-white/[0.06] bg-ink-950/60 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[13px] text-bone-50">{result.username}</span>
-              <Badge
-                tone={
-                  result.status === "available"
-                    ? "ok"
-                    : result.status === "taken"
-                      ? "neutral"
-                      : result.status === "unconfigured" || result.status === "rate_limited"
-                        ? "warn"
-                        : "danger"
-                }
-              >
-                {STATUS_META[result.status]?.label ?? statusView.text}
-              </Badge>
-            </div>
-            <p className="mt-1 text-[11px] leading-snug text-bone-500">{result.detail}</p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[10px] text-bone-500">
-              <span>{result.latencyMs} ms</span>
-              <span>{result.score}/99 · {result.tier}</span>
-              <span>{result.proxy ?? "conexão direta"}</span>
-            </div>
-            {result.status === "available" ? (
-              <div className="mt-2.5 flex items-center gap-2">
-                <CopyButton value={result.username} />
-                <a
-                  href={meta.claimUrl(result.username)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-lime-300 hover:underline"
-                >
-                  capturar <ArrowUpRight className="h-3 w-3" />
-                </a>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-[10.5px] leading-relaxed text-bone-500">
-            Consulta real na plataforma escolhida. Respeita o token e o proxy configurados em Ajustes.
-          </p>
+    <div className="rounded-lg border border-white/[0.055] bg-[#0A0C0C] px-3.5 py-2.5">
+      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-bone-600">{label}</p>
+      <p
+        className={cn(
+          "mt-1 font-mono text-[18px] leading-none tracking-[-0.02em]",
+          accent ? "text-lime-300" : "text-bone-100"
         )}
-      </div>
-    </Panel>
+      >
+        {value}
+      </p>
+      <p className="mt-1 font-mono text-[9px] text-bone-700">{hint}</p>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
-import { guard, json, fail, readBody } from "@/lib/api";
+import { json, fail, readBody } from "@/lib/api";
+import { isNextResponse, requireAccess } from "@/lib/access";
 import { engine } from "@/lib/engine";
 import { updateData } from "@/lib/store";
 
@@ -12,9 +13,18 @@ interface EngineAction {
 }
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
-  if (blocked) return blocked;
+  const access = await requireAccess(request);
+  if (isNextResponse(access)) return access;
   const body = (await readBody<EngineAction>(request)) ?? {};
+
+  // Cliente só pode empurrar o motor (tick). Pausar, retomar e rodar são do admin.
+  if (access.kind !== "admin" && body.action === "tick") {
+    const result = await engine.tick();
+    return json({ ok: true, ...result });
+  }
+  if (access.kind !== "admin") {
+    return fail("Somente o administrador controla o motor.", 403);
+  }
 
   switch (body.action) {
     case "start": {

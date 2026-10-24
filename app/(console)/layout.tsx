@@ -1,16 +1,19 @@
+import { redirect } from "next/navigation";
 import { ConsoleProvider } from "@/components/console-provider";
 import { ConsoleShell } from "@/components/shell/console-shell";
 import { ToastProvider } from "@/components/ui/toast";
-import { requirePageAuth } from "@/lib/auth";
 import { ensureEngineStarted } from "@/lib/engine";
+import { pageAccess } from "@/lib/page-access";
 import { buildSnapshot } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
-  await requirePageAuth();
+  const access = await pageAccess();
+  if (!access) redirect("/");
+
   await ensureEngineStarted();
-  const initial = await buildSnapshot();
+  const initial = await buildSnapshot(access);
 
   return (
     <ToastProvider>

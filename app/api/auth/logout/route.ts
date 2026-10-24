@@ -1,17 +1,15 @@
-import { NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { json } from "@/lib/api";
+import { clearSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  });
-  return response;
+  await clearSession();
+  return json({ ok: true });
+}
+
+export async function GET() {
+  await clearSession();
+  return json({ ok: true });
 }

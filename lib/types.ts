@@ -23,6 +23,8 @@ export type JobMode = "sequential" | "random" | "pattern" | "wordlist";
 
 export interface Job {
   id: string;
+  /** Licença dona do monitor ("admin" para o operador). */
+  owner?: string | null;
   name: string;
   platform: PlatformId;
   enabled: boolean;
@@ -59,6 +61,7 @@ export interface Hit {
 export interface LogEntry {
   id: string;
   ts: number;
+  jobId?: string | null;
   level: "info" | "available" | "taken" | "error";
   platform: PlatformId | null;
   username: string | null;
