@@ -13,11 +13,19 @@ const DEFAULT_API =
 
 export type ProxyProtocol = "http" | "socks4" | "socks5";
 
+export type ProxyFamily = "any" | "ipv4" | "ipv6";
+
 export interface ImportOptions {
   protocol: ProxyProtocol | "all";
   country?: string;
   limit?: number;
   timeoutMs?: number;
+  /** `ipv6` usa o feed IPv6 da ProxyScrape — pool maior e menos saturado. */
+  family?: ProxyFamily;
+}
+
+export function isIpv6(host: string): boolean {
+  return host.includes(":");
 }
 
 export interface ParsedProxy {
@@ -37,6 +45,8 @@ export function buildUrl(options: ImportOptions): string {
   url.searchParams.set("format", "json");
   url.searchParams.set("timeout", String(options.timeoutMs ?? 2000));
   if (options.country) url.searchParams.set("country", options.country);
+  if (options.family === "ipv6") url.searchParams.set("ipv6", "true");
+  if (options.family === "ipv4") url.searchParams.set("ipv6", "false");
   return url.toString();
 }
 
@@ -50,7 +60,7 @@ function normalizeProtocol(value: string): string {
 
 function parseEntry(entry: unknown): ParsedProxy | null {
   if (typeof entry === "string") {
-    const match = entry.trim().match(/^(?:(socks5|socks4|http|https):\/\/)?([\d.]+|\[[0-9a-f:]+\]):(\d{2,5})$/i);
+    const match = entry.trim().match(/^(?:(socks5|socks4|http|https):\/\/)?(\[[0-9a-f:]+\]|[0-9a-f:]+(?:\.[0-9.]+)?):(\d{2,5})$/i);
     if (!match) return null;
     return {
       protocol: normalizeProtocol(match[1] ?? "http"),
@@ -161,7 +171,10 @@ export async function fetchProxies(options: ImportOptions): Promise<ParsedProxy[
       /* formato texto */
     }
     const limit = Math.min(options.limit ?? 80, 300);
-    return parseProxiesPayload(payload).slice(0, limit);
+    let parsed = parseProxiesPayload(payload);
+    if (options.family === "ipv6") parsed = parsed.filter((proxy) => isIpv6(proxy.host));
+    if (options.family === "ipv4") parsed = parsed.filter((proxy) => !isIpv6(proxy.host));
+    return parsed.slice(0, limit);
   } finally {
     clearTimeout(timer);
   }
@@ -176,7 +189,7 @@ export function toCloudProxy(proxy: ParsedProxy): Omit<CloudProxy, "id" | "creat
     password: null,
     country: proxy.country,
     latencyMs: proxy.latencyMs,
-    source: "proxyscrape",
+    source: proxy.host.includes(":") ? "proxyscrape:ipv6" : "proxyscrape",
     status: "unknown",
     lastCheckedAt: null,
   };

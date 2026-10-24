@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Gate } from "@/components/gate";
-import { getSettings, listPlans, listPlatforms, listUsers } from "@/lib/cloud/repo";
+import { getSettings, listUsers } from "@/lib/cloud/repo";
+import { DEFAULT_SETTINGS } from "@/lib/cloud/types";
 import { discordConfigured } from "@/lib/discord";
 import { pageAccess } from "@/lib/page-access";
 import { readSession } from "@/lib/session";
@@ -13,16 +14,20 @@ export const metadata = {
 };
 
 export default async function Home() {
-  const access = await pageAccess();
+  // Qualquer falha de banco aqui não pode derrubar a tela de entrada.
+  let access = null;
+  try {
+    access = await pageAccess();
+  } catch {
+    access = null;
+  }
   if (access) redirect(access.kind === "admin" ? "/admin" : "/painel");
 
-  const [settings, platforms, plans, discord, session, users] = await Promise.all([
-    getSettings(),
-    listPlatforms(),
-    listPlans(),
-    discordConfigured(),
-    readSession("user"),
-    listUsers(),
+  const [settings, discord, session, users] = await Promise.all([
+    getSettings().catch(() => DEFAULT_SETTINGS),
+    discordConfigured().catch(() => false),
+    readSession("user").catch(() => null),
+    listUsers().catch(() => []),
   ]);
 
   const connected = session
@@ -32,20 +37,7 @@ export default async function Home() {
   return (
     <Gate
       branding={settings.branding}
-      platforms={platforms}
-      plans={plans
-        .filter((plan) => plan.active)
-        .map((plan) => ({
-          id: plan.id,
-          name: plan.name,
-          days: plan.days,
-          maxMonitors: plan.maxMonitors,
-          priceCents: plan.priceCents,
-        }))}
       discordConfigured={discord}
-      maintenance={settings.gate.maintenance}
-      requireDiscord={settings.gate.requireDiscord}
-      welcome={settings.gate.welcome}
       discordUser={
         connected
           ? {
@@ -54,6 +46,9 @@ export default async function Home() {
             }
           : null
       }
+      maintenance={settings.gate.maintenance}
+      welcome={settings.gate.welcome}
+      requireDiscord={settings.gate.requireDiscord}
     />
   );
 }

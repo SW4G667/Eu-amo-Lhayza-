@@ -55,13 +55,22 @@ export async function rateLimit(
 ): Promise<RateResult> {
   const ip = clientIp(request);
   const key = `${options.bucket}:${ip}`;
-  const hits = await recentAttempts(key, options.windowMs);
   const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
-  return { allowed: hits < options.limit, hits, retryAfterSeconds };
+  try {
+    const hits = await recentAttempts(key, options.windowMs);
+    return { allowed: hits < options.limit, hits, retryAfterSeconds };
+  } catch {
+    // Banco fora do ar não pode impedir o login: segue sem bloquear.
+    return { allowed: true, hits: 0, retryAfterSeconds };
+  }
 }
 
 export async function trackAttempt(request: Request, bucket: string, kind: string, ok: boolean): Promise<void> {
-  await recordAttempt(`${bucket}:${clientIp(request)}`, kind, ok, clientIp(request));
+  try {
+    await recordAttempt(`${bucket}:${clientIp(request)}`, kind, ok, clientIp(request));
+  } catch {
+    /* telemetria nunca derruba o login */
+  }
 }
 
 export function userAgent(request: Request): string {

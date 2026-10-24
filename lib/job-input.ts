@@ -88,20 +88,22 @@ export function buildJob(
 
   const words = toWords(input.words ?? existing?.words ?? []);
 
+  // Ritmo conservador: no máximo 5 nomes por rodada e ao menos 7s entre
+  // rodadas. É o que mantém a conta viva por muito mais tempo.
   const batchSize = clamp(
-    Math.floor(Number(input.batchSize ?? existing?.batchSize ?? 10)) || 10,
+    Math.floor(Number(input.batchSize ?? existing?.batchSize ?? 5)) || 5,
     1,
-    200
+    5
   );
   const intervalMs = clamp(
-    Math.floor(Number(input.intervalMs ?? existing?.intervalMs ?? 2000)) || 2000,
-    500,
+    Math.floor(Number(input.intervalMs ?? existing?.intervalMs ?? 7000)) || 7000,
+    7000,
     600_000
   );
   const concurrency = clamp(
     Math.floor(Number(input.concurrency ?? existing?.concurrency ?? 1)) || 1,
     1,
-    8
+    2
   );
   const minScore = clamp(Math.floor(Number(input.minScore ?? existing?.minScore ?? 0)) || 0, 0, 99);
 

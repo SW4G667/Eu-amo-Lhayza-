@@ -268,12 +268,12 @@ export function SettingsTab({
           <Integration
             icon={<Server className="h-3.5 w-3.5" />}
             title="phanomcloud"
-            status={phanom.configured ? (phanom.ok ? "online" : "sem resposta") : "token ausente"}
-            ok={phanom.configured && phanom.ok}
+            status={phanom.configured ? (phanom.reachable ? "online" : "sem resposta") : "token ausente"}
+            ok={phanom.configured && phanom.reachable}
             detail={
               phanom.configured
-                ? phanom.message
-                : "Defina PHANOM_TOKEN (auto_...) para controlar os bots 24/7."
+                ? (phanom.error ?? `tokens ${phanom.tokenKind ?? "custom"} · ${phanom.bots.length} bot(s)`)
+                : "Defina PHANOM_TOKEN para controlar os bots 24/7."
             }
           />
           <Integration

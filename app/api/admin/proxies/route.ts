@@ -28,6 +28,7 @@ interface ProxyBody {
   protocol?: "http" | "socks4" | "socks5" | "all";
   country?: string;
   limit?: number;
+  family?: "any" | "ipv4" | "ipv6";
 }
 
 export async function POST(request: Request) {
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
       protocol: body.protocol ?? "all",
       country: body.country?.trim() || undefined,
       limit: body.limit ?? 80,
+      family: body.family ?? "any",
     });
     if (!parsed.length) return fail("A ProxyScrape não devolveu proxies agora. Tente em instantes.", 502);
     const added = await addProxies(parsed.map(toCloudProxy));
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
       kind: "proxy.import",
       severity: "success",
       actor: access.label,
-      message: `${added} proxy(s) importada(s) do ProxyScrape (${body.protocol ?? "all"}).`,
+      message: `${added} proxy(s) importada(s) do ProxyScrape (${body.protocol ?? "all"}, ${body.family ?? "any"}).`,
     });
     return json({ ok: true, imported: added, sample: parsed.slice(0, 5) });
   } catch (error) {

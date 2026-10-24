@@ -11,11 +11,12 @@ import type {
 
 export interface PhanomInfo {
   configured: boolean;
-  ok: boolean;
-  message: string;
-  version?: string | null;
-  bots?: Array<{ id: string; name?: string; status?: string; plan?: string }> | null;
-  base?: string;
+  reachable: boolean;
+  version: string | null;
+  latencyMs: number | null;
+  error: string | null;
+  bots: Array<{ id: string; name?: string; status?: string; language?: string }>;
+  tokenKind: "session" | "automation" | null;
 }
 
 export interface OverviewPayload {

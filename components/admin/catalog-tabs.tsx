@@ -383,7 +383,8 @@ export function ProxiesTab({
   onRefresh: () => Promise<void>;
   notify: Notify;
 }) {
-  const [protocol, setProtocol] = useState("all");
+  const [protocol, setProtocol] = useState("http");
+  const [family, setFamily] = useState<"any" | "ipv4" | "ipv6">("ipv6");
   const [country, setCountry] = useState("");
   const [limit, setLimit] = useState("80");
   const [busy, setBusy] = useState<string | null>(null);
@@ -392,6 +393,7 @@ export function ProxiesTab({
     total: proxies.length,
     ok: proxies.filter((proxy) => proxy.status === "ok").length,
     dead: proxies.filter((proxy) => proxy.status === "dead").length,
+    v6: proxies.filter((proxy) => proxy.host.includes(":")).length,
   };
 
   async function importFromScrape() {
@@ -399,6 +401,7 @@ export function ProxiesTab({
     const result = await send<{ imported: number }>("/api/admin/proxies", "POST", {
       action: "import",
       protocol,
+      family,
       country: country.trim() || undefined,
       limit: Number(limit) || 80,
     });
@@ -439,11 +442,12 @@ export function ProxiesTab({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         {[
           { label: "no pool", value: counters.total, icon: Database },
           { label: "respondendo", value: counters.ok, icon: Activity },
           { label: "mortas", value: counters.dead, icon: Server },
+          { label: "ipv6", value: counters.v6, icon: Globe2 },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-white/[0.055] bg-[#0A0C0C] px-3 py-2">
             <p className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.12em] text-bone-600">
@@ -471,6 +475,20 @@ export function ProxiesTab({
                   {item}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.13em] text-bone-600">
+              família
+            </span>
+            <select
+              value={family}
+              onChange={(event) => setFamily(event.target.value as "any" | "ipv4" | "ipv6")}
+              className="h-8 rounded-md border border-white/[0.07] bg-ink-950/70 px-2 text-[12px] text-bone-100 outline-none focus:border-lime-500/40"
+            >
+              <option value="ipv6" className="bg-ink-900">IPv6</option>
+              <option value="any" className="bg-ink-900">qualquer</option>
+              <option value="ipv4" className="bg-ink-900">IPv4</option>
             </select>
           </label>
           <TextField
@@ -503,8 +521,8 @@ export function ProxiesTab({
           </ActionButton>
         </div>
         <p className="border-t border-white/[0.045] px-4 py-2 font-mono text-[9.5px] leading-relaxed text-bone-700">
-          O teste abre uma conexão TCP direta com cada proxy. Proxies que exigem autenticação
-          aparecem como mortas — isso é normal na lista gratuita.
+          IPv6 é o pool recomendado: mais endereços, menos saturado e menos bloqueio por IP.
+          O teste abre uma conexão TCP real; proxy que exige autenticação aparece como morta — normal na lista gratuita.
         </p>
       </Card>
 
@@ -533,7 +551,9 @@ export function ProxiesTab({
                       <span className="mr-1.5 rounded bg-white/[0.05] px-1 py-[1px] text-[8.5px] uppercase text-bone-500">
                         {proxy.protocol}
                       </span>
-                      {proxy.host}:{proxy.port}
+                      <span className={proxy.host.includes(":") ? "text-[#AEB9FF]" : undefined}>
+                        {proxy.host.includes(":") ? `[${proxy.host}]` : proxy.host}:{proxy.port}
+                      </span>
                     </td>
                     <td className="px-4 py-1.5 font-mono text-bone-500">
                       <span className="inline-flex items-center gap-1">

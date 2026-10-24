@@ -75,19 +75,23 @@ export function AdminConsole({ label }: { label: string }) {
       getJson<{ events: AdminData["events"] }>("/api/admin/events?limit=200"),
     ]);
 
-    if (!overview || !licenses || !users || !platforms || !proxies || !events) {
-      setError("Não foi possível carregar o painel. Sua sessão pode ter expirado.");
+    if (!overview) {
+      setError("Não foi possível carregar o painel. Atualize a página ou entre novamente.");
       setLoading(false);
       return;
     }
 
     setData({
       overview,
-      licenses,
-      users,
-      platforms: platforms.platforms,
-      proxies: proxies.proxies,
-      events: events.events,
+      licenses:
+        licenses ?? {
+          licenses: [],
+          counters: { total: 0, pending: 0, active: 0, expired: 0, revoked: 0, suspended: 0 },
+        },
+      users: users ?? { users: [] },
+      platforms: platforms?.platforms ?? [],
+      proxies: proxies?.proxies ?? [],
+      events: events?.events ?? [],
       settings: overview.settings,
     });
     setError(null);
@@ -146,7 +150,7 @@ export function AdminConsole({ label }: { label: string }) {
             <span
               className={cn(
                 "h-1.5 w-1.5 rounded-full",
-                data?.overview.phanom.configured && data.overview.phanom.ok
+                data?.overview.phanom.configured && data.overview.phanom.reachable
                   ? "bg-mint"
                   : "bg-amberglow"
               )}
@@ -433,12 +437,14 @@ function OverviewTab({ data, onGo }: { data: AdminData; onGo: (tab: AdminTab) =>
             <ServiceRow
               icon={<Activity className="h-3 w-3" />}
               label="PhanomCloud"
-              ok={phanom.configured && phanom.ok}
+              ok={phanom.configured && phanom.reachable}
               value={
                 phanom.configured
-                  ? phanom.version
-                    ? `online · v${phanom.version}`
-                    : phanom.message
+                  ? phanom.reachable
+                    ? phanom.version
+                      ? `online · v${phanom.version}`
+                      : "online"
+                    : phanom.error ?? "sem resposta"
                   : "token ausente"
               }
             />

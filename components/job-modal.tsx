@@ -63,8 +63,8 @@ function defaults(platform: PlatformId = "discord"): FormState {
     charset: "abcdefghijklmnopqrstuvwxyz",
     pattern: "",
     words: "",
-    batchSize: 10,
-    intervalSec: 2,
+    batchSize: 5,
+    intervalSec: 7,
     concurrency: 1,
     useProxies: false,
     minScore: 0,
@@ -207,9 +207,9 @@ export function JobModal({
       charset: form.charset,
       pattern: form.pattern,
       words: form.words,
-      batchSize: clamp(Math.round(form.batchSize), 1, 200),
-      intervalMs: Math.round(clamp(form.intervalSec, 0.5, 600) * 1000),
-      concurrency: clamp(Math.round(form.concurrency), 1, 8),
+      batchSize: clamp(Math.round(form.batchSize), 1, 5),
+      intervalMs: Math.round(clamp(form.intervalSec, 7, 600) * 1000),
+      concurrency: clamp(Math.round(form.concurrency), 1, 2),
       useProxies: form.useProxies,
       minScore: clamp(Math.round(form.minScore), 0, 99),
       enabled: form.enabled || form.startNow,
@@ -454,32 +454,32 @@ export function JobModal({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="nomes por rodada" hint="Gerados e checados a cada tick.">
+          <Field label="nomes por rodada" hint="Máximo 5 — menor risco de ban.">
             <Input
               type="number"
               min={1}
-              max={200}
+              max={5}
               value={form.batchSize}
               onChange={(event) => update("batchSize", Number(event.target.value) || 1)}
               className="font-mono"
             />
           </Field>
-          <Field label="intervalo (s)" hint="Tempo entre rodadas.">
+          <Field label="espera (s)" hint="Mínimo 7s entre rodadas.">
             <Input
               type="number"
-              min={0.5}
+              min={7}
               max={600}
-              step={0.5}
+              step={1}
               value={form.intervalSec}
-              onChange={(event) => update("intervalSec", Number(event.target.value) || 0.5)}
+              onChange={(event) => update("intervalSec", Number(event.target.value) || 7)}
               className="font-mono"
             />
           </Field>
-          <Field label="concorrência" hint="Requisições simultâneas.">
+          <Field label="concorrência" hint="Máximo 2. 1 é o mais seguro.">
             <Input
               type="number"
               min={1}
-              max={8}
+              max={2}
               value={form.concurrency}
               onChange={(event) => update("concurrency", Number(event.target.value) || 1)}
               className="font-mono"
@@ -491,10 +491,11 @@ export function JobModal({
           <div className="flex items-center gap-2">
             <Loader2 className="h-3.5 w-3.5 text-lime-300" strokeWidth={2} />
             <span className="text-[11.5px] text-bone-300">
-              Ritmo estimado:{" "}
+              Ritmo seguro:{" "}
               <span className="font-mono text-bone-100">
                 {rate.toFixed(rate < 1 ? 2 : 1).replace(".", ",")} nomes/s
               </span>
+              <span className="ml-1 text-bone-600">(pausa de ~1,4s entre checagens)</span>
             </span>
           </div>
           <Badge tone="muted">

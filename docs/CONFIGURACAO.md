@@ -5,6 +5,19 @@ precisa ser feito. O que já está pronto vem marcado com ✅.
 
 ---
 
+## 0. Ritmo seguro (importante para a conta durar)
+
+O motor foi travado em um ritmo de gente:
+
+- **no máximo 5 usernames por rodada**;
+- **espera mínima de 7 segundos** entre rodadas;
+- **~1,4 s (com jitter) entre uma checagem e outra** dentro da rodada;
+- concorrência máxima **2** (padrão **1**);
+- ao receber `429`, o monitor entra em pausa automática e volta depois do `Retry-After`.
+
+Esses limites são aplicados no servidor (`lib/job-input.ts` e `lib/engine.ts`), não só na tela —
+não adianta forçar pelo console. É o que evita banimento em massa.
+
 ## 1. Como o sistema funciona
 
 ```
@@ -171,14 +184,18 @@ estado; os tokens de conta ficam em `/ajustes` do console (cifrados no banco).
 
 ---
 
-## 8. Proxies (ProxyScrape)
+## 8. Proxies (ProxyScrape, com IPv6)
 
 **/admin → Proxies**
 
-1. escolha o protocolo (`http` é o mais compatível), país opcional (`BR`), quantidade;
-2. **importar** → puxa a lista pública do ProxyScrape;
+1. protocolo `http`, **família `IPv6`** (recomendado), país opcional (`BR`), quantidade;
+2. **importar** → puxa o feed IPv6 do ProxyScrape;
 3. **testar 12** → abre conexão TCP real e mede latência;
 4. **limpar mortas** → tira do pool o que não responde.
+
+IPv6 tem muito mais endereços e sofre menos bloqueio por IP — por isso já vem selecionado.
+Se o pool IPv6 secar, troque para `qualquer` e importe de novo; o motor continua funcionando
+com o que estiver no pool.
 
 Proxies gratuitos costumam exigir autenticação ou morrer rápido — o teste é honesto e vai
 marcar boa parte como morta. O motor usa rotação e cooldown automático.
@@ -214,7 +231,7 @@ git push origin main          # a Vercel builda sozinha
 
 Ou no painel: **Deployments → Redeploy**. Checklist pós-deploy:
 
-- [ ] `/` abre com os dois cards
+- [ ] `/` abre só com Discord + key (fundo transparente)
 - [ ] `access-6xy-67` entra em `/admin`
 - [ ] `DISCORD_CLIENT_ID` + `SECRET` aparecem como *configurado* em Ajustes
 - [ ] gerar 1 key de teste, ativar com uma conta Discord e ver `/painel`
