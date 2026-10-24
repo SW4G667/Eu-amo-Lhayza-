@@ -1,3 +1,5 @@
+import type { PlatformState } from "./cloud/types";
+import type { PublicLicense } from "./cloud/serialize";
 import type {
   AlertSettings,
   EngineSettings,
@@ -45,6 +47,12 @@ export interface Snapshot {
     scheduledJobs: number;
     cooldowns: Record<string, number>;
   };
+  platforms: PlatformState[];
+  me: {
+    kind: "admin" | "user";
+    label: string;
+    license: PublicLicense | null;
+  } | null;
   runtime: {
     storage: string;
     vercel: boolean;

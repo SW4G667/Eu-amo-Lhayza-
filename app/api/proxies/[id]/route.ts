@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, { params }: Params) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const { id } = await params;
   const body = await readBody<{ enabled?: boolean }>(request);
@@ -27,7 +27,7 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(request: Request, { params }: Params) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const { id } = await params;
   await updateData((store) => {

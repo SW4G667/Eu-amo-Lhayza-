@@ -1,3 +1,6 @@
+import type { Access } from "./access";
+import { listPlatforms } from "./cloud/repo";
+import { publicLicense } from "./cloud/serialize";
 import { engine } from "./engine";
 import { usingDefaultPassword } from "./auth";
 import { lastStateError, readData, stateStatus, storageLabel } from "./store";
@@ -13,18 +16,35 @@ function credentialInfo(
   return { configured, valid, username, detail, checkedAt };
 }
 
-export async function buildSnapshot(): Promise<Snapshot> {
+/**
+ * Monta o retrato do console respeitando o escopo de quem pediu:
+ * o administrador vê tudo; o cliente vê apenas os próprios monitores,
+ * achados e eventos.
+ */
+export async function buildSnapshot(access?: Access | null): Promise<Snapshot> {
   const data = await readData();
   const snapshot = engine.snapshot();
+  const platforms = await listPlatforms();
+
+  const isAdmin = !access || access.kind === "admin";
+  const owner = access?.license?.id ?? "";
+  const jobs = isAdmin ? data.jobs : data.jobs.filter((job) => job.owner === owner);
+  const ownedIds = new Set(jobs.map((job) => job.id));
+  const hits = isAdmin ? data.hits : data.hits.filter((hit) => ownedIds.has(hit.jobId));
+  const logs = isAdmin
+    ? data.logs
+    : data.logs.filter((entry) => Boolean(entry.jobId && ownedIds.has(entry.jobId)));
 
   return {
-    jobs: data.jobs,
-    hits: data.hits.slice(0, 300),
-    logs: data.logs.slice(0, 120),
-    proxies: data.proxies.map(({ password, cooldownUntil, ...rest }) => ({
-      ...rest,
-      hasPassword: Boolean(password),
-    })),
+    jobs,
+    hits: hits.slice(0, 300),
+    logs: logs.slice(0, 120),
+    proxies: isAdmin
+      ? data.proxies.map(({ password, cooldownUntil, ...rest }) => ({
+          ...rest,
+          hasPassword: Boolean(password),
+        }))
+      : [],
     stats: {
       ...data.stats,
       buckets: data.stats.buckets.slice(-45),
@@ -68,10 +88,18 @@ export async function buildSnapshot(): Promise<Snapshot> {
       storage: storageLabel(),
       vercel: Boolean(process.env.VERCEL),
       defaultPassword: usingDefaultPassword(),
-      version: "1.0.0",
+      version: "1.1.0",
       uptimeMs: Date.now() - snapshot.startedAt,
       state: { ...stateStatus(), error: lastStateError(), runner: data.runner ?? null },
     },
+    platforms,
+    me: access
+      ? {
+          kind: access.kind,
+          label: access.label,
+          license: access.kind === "user" ? publicLicense(access.license) : null,
+        }
+      : null,
     now: Date.now(),
   };
 }

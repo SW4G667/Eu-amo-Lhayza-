@@ -20,7 +20,7 @@ interface CredentialBody {
 }
 
 export async function DELETE(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const platform = new URL(request.url).searchParams.get("platform");
   if (!platform) return fail("Informe a plataforma", 422);
@@ -34,7 +34,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const blocked = guard(request);
+  const blocked = await guard(request);
   if (blocked) return blocked;
   const body = await readBody<CredentialBody>(request);
   if (!body?.platform) return fail("Informe a plataforma", 422);

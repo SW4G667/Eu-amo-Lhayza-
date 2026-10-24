@@ -53,8 +53,12 @@ export async function isAuthenticated(): Promise<boolean> {
   return verifySessionToken(store.get(SESSION_COOKIE)?.value);
 }
 
+/**
+ * @deprecated A v1.1 usa `pageAccess()` (Discord ou key). Mantido apenas
+ * para integrações antigas que ainda chamam a senha legada.
+ */
 export async function requirePageAuth(): Promise<void> {
-  if (!(await isAuthenticated())) redirect("/login");
+  if (!(await isAuthenticated())) redirect("/");
 }
 
 export function requestIsAuthed(request: Request): boolean {

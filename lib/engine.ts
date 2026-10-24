@@ -177,6 +177,7 @@ class Engine {
           d.logs.unshift({
             id: uid("log"),
             ts: Date.now(),
+            jobId,
             level: "error",
             platform: job.platform,
             username: null,
@@ -217,6 +218,7 @@ class Engine {
           d.logs.unshift({
             id: uid("log"),
             ts: Date.now(),
+            jobId,
             level: "info",
             platform: job.platform,
             username: null,
@@ -312,6 +314,7 @@ class Engine {
         const logs: LogEntry[] = results.map((r) => ({
           id: uid("log"),
           ts: now,
+          jobId,
           level: levelFor(r.out.status),
           platform: job.platform,
           username: r.name,

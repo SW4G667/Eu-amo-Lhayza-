@@ -77,7 +77,7 @@ export function ConsoleProvider({
     try {
       const response = await fetch("/api/state", { cache: "no-store", headers: stateHeaders() });
       if (response.status === 401) {
-        window.location.href = "/login";
+        window.location.href = "/";
         return;
       }
       if (!response.ok) throw new Error("Falha ao atualizar o estado");
