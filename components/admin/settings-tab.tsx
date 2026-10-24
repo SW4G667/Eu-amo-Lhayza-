@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Copy, ExternalLink, Info, Save, Server, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, Info, Save, Server, ShieldCheck } from "lucide-react";
 import type { SettingsMap, SettingsKey } from "@/lib/cloud/types";
 import { ActionButton, Card, CopyInline, TextField, Toggle } from "./ui";
 import type { PhanomInfo } from "./types";
@@ -380,4 +380,3 @@ export function SecretsCard() {
   );
 }
 
-export { Copy };

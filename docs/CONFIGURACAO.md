@@ -51,22 +51,24 @@ Três ideias importantes:
 
 ## 3. Supabase ✅ (já configurado)
 
-Projeto: **zx-sparkle-cart** (`nrtsagqxlsmtkijetnya`) — schema isolado **`atalaia`**.
+Projeto: **zx-sparkle-cart** (`nrtsagqxlsmtkijetnya`) — tabelas próprias no schema
+`public`, todas com o prefixo **`atl_`** (o PostgREST só expõe `public` por padrão).
 
-✅ Tabelas criadas: `plans`, `licenses`, `users`, `events`, `attempts`, `settings`,
-`platforms`, `proxies`.
+✅ Tabelas criadas: `atl_plans`, `atl_licenses`, `atl_users`, `atl_events`,
+`atl_attempts`, `atl_settings`, `atl_platforms`, `atl_proxies`.
 ✅ RLS ligado, `anon`/`authenticated` revogados, `service_role` liberado.
 ✅ Seed: 4 planos, 11 plataformas (só **Discord** liberado) e as 5 chaves de configuração.
 
 Para conferir depois de qualquer mudança, rode no SQL Editor:
 
 ```sql
-select count(*) from atalaia.plans;
-select id, enabled, note from atalaia.platforms order by id;
-select key from atalaia.settings;
+select count(*) from public.atl_plans;
+select id, enabled, note from public.atl_platforms order by id;
+select key from public.atl_settings;
 ```
 
-**Nunca** rode SQL no schema `public` desse projeto: ele pertence a outro app.
+**Nunca** altere as outras tabelas desse projeto (`xgb_*`, `valtrex_*`, `zenyx_*`):
+pertencem a outros apps. Só mexa nas `atl_*`.
 E nunca toque no projeto `ZXMAX - OFFPROJECT`.
 
 Onde pegar as chaves: Supabase → Project Settings → API → `service_role` (Reveal).
@@ -228,7 +230,7 @@ Ou no painel: **Deployments → Redeploy**. Checklist pós-deploy:
 | “Entrar com Discord” em *Em breve* | falta `DISCORD_CLIENT_ID/SECRET` | configure e faça redeploy |
 | `428 discord_required` ao colar a key | falta conectar o Discord | conecte primeiro, depois cole a key |
 | `401 Sessão expirada` em tudo | `APP_SECRET` mudou | entre novamente |
-| Erro `Supabase 404` | schema `atalaia` ausente | rode o SQL da seção 3 |
+| Erro `Supabase 404` | tabelas `atl_*` ausentes | rode o SQL da seção 3 |
 | Phanom “token ausente” / “sem resposta” | token `pc_` ou não definido | gere `auto_...` e redeploy |
 | Cliente vê tudo bloqueado | nenhuma plataforma liberada | `/admin → Plataformas` |
 | ProxyScrape devolve vazio | API pública instável | tente de novo em 1 minuto |
